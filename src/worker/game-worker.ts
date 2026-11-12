@@ -11,8 +11,8 @@ import { GameState } from '../game/state.js';
 import { snapshot, type GameSnapshot } from '../game/snapshot.js';
 import { newMemory, type Ctx, type ActionResult } from '../actions/types.js';
 import { listActions, runAction, tileAction } from '../actions/index.js';
-import { tap, isNamingScreen } from '../actions/nav.js';
-import { detectMode } from '../game/mode.js';
+import { tap } from '../actions/nav.js';
+import { AutoAdvance } from '../actions/advance.js';
 import { Control, Slot, StopError } from './control.js';
 
 const { sab, romPath, resume, autosave } = workerData as { sab: SharedArrayBuffer; romPath: string; resume?: string; autosave: boolean };
@@ -116,18 +116,10 @@ function run(id: string, arg: unknown): ActionResult {
 }
 
 // ---- dialogue auto-advance: plain text that only wants A, at a readable pace; never when a choice is showing
-let advText = '', advSince = Date.now();
+const advancer = new AutoAdvance();
 function autoAdvance() {
-  if (!ctl.get(Slot.AUTO_ADVANCE)) { advText = ''; return; }
-  const s = gs.screen();
-  if (s.cursor || detectMode(ctx) !== 'dialog' || isNamingScreen(ctx)) { advText = ''; advSince = Date.now(); return; }
-  // the ▼ prompt blinks, so the text is compared without it and a blink doesn't restart the clock.
-  // A full-screen page with no text box (a Pokédex entry) is compared as a whole.
-  const text = (s.hasTextBox ? s.dialog : s.rows.join('')).replace(/▼/g, '').trim();
-  if (!text) { advText = ''; advSince = Date.now(); return; }
-  if (text !== advText) { advText = text; advSince = Date.now(); return; }
-  // (not every finished text box shows the ▼ prompt, so unchanged text is the signal)
-  if (Date.now() - advSince >= ctl.get(Slot.ADVANCE_PACE_MS)) { tap(ctx, 'A', 4); advText = ''; advSince = Date.now(); }
+  if (!ctl.get(Slot.AUTO_ADVANCE)) { advancer.reset(); return; }
+  if (advancer.due(ctx, Date.now(), ctl.get(Slot.ADVANCE_PACE_MS))) tap(ctx, 'A', 4);
 }
 
 // ---- requests from the main thread (handled between idle frames)

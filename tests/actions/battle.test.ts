@@ -35,3 +35,36 @@ describe.skipIf(!hasFixture('fx-wild'))('wild battle actions', () => {
     expect(ctx.gs.inBattle).toBe(0);
   });
 });
+
+import { AutoAdvance } from '../../src/actions/advance.js';
+import { detectMode } from '../../src/game/mode.js';
+
+describe.skipIf(!hasFixture('fx-battle'))('battle text', () => {
+  /** Play turns until the battle shows text that waits for A (a critical hit, a faint, a level-up...). */
+  function toWaitingText() {
+    const ctx = boot('fx-battle');
+    for (let i = 0; i < 40000; i++) {
+      const s = ctx.gs.screen();
+      if (detectMode(ctx) === 'battle' && s.waitingForA && !s.cursor) return ctx;
+      const move = listActions(ctx).find((a) => a.kind === 'move');
+      if (move) runAction(ctx, move.id); else ctx.emu.frame();
+    }
+    throw new Error('never reached waiting battle text');
+  }
+
+  it('auto-advance continues battle text that waits for A, after the reading time', () => {
+    const ctx = toWaitingText();
+    const adv = new AutoAdvance();
+    expect(adv.due(ctx, 1000, 1500)).toBe(false);   // first sight of this text: start the clock
+    expect(adv.due(ctx, 2000, 1500)).toBe(false);   // not read yet
+    expect(adv.due(ctx, 2600, 1500)).toBe(true);    // 1.6 s unchanged: continue
+    expect(adv.due(ctx, 2700, 1500)).toBe(false);   // and the clock starts over
+  });
+
+  it('auto-advance never fires while the battle menu is waiting for a choice', () => {
+    const ctx = boot('fx-battle');
+    const adv = new AutoAdvance();
+    adv.due(ctx, 0, 100);
+    expect(adv.due(ctx, 10_000, 100)).toBe(false);
+  });
+});
