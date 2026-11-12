@@ -119,9 +119,11 @@ let advText = '', advSince = Date.now();
 function autoAdvance() {
   if (!ctl.get(Slot.AUTO_ADVANCE)) { advText = ''; return; }
   const s = gs.screen();
-  if (!s.waitingForA || s.cursor) { advText = ''; advSince = Date.now(); return; }
-  if (s.dialog !== advText) { advText = s.dialog; advSince = Date.now(); return; }
-  if (Date.now() - advSince >= ctl.get(Slot.ADVANCE_PACE_MS)) { tap(ctx, 'A', 4); advText = ''; advSince = Date.now(); }
+  if (s.cursor || !s.hasTextBox) { advText = ''; advSince = Date.now(); return; }
+  // the ▼ prompt blinks, so the text is compared without it and a blink doesn't restart the clock
+  const text = s.dialog.replace(/▼/g, '').trim();
+  if (text !== advText) { advText = text; advSince = Date.now(); return; }
+  if (s.waitingForA && Date.now() - advSince >= ctl.get(Slot.ADVANCE_PACE_MS)) { tap(ctx, 'A', 4); advText = ''; advSince = Date.now(); }
 }
 
 // ---- requests from the main thread (handled between idle frames)
