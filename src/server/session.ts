@@ -5,6 +5,19 @@ import type { GameSnapshot } from '../game/snapshot.js';
 import type { Interpreter } from '../interpret/interpreter.js';
 import { fastPath } from '../interpret/fastpath.js';
 import { nameWords } from '../interpret/name.js';
+
+const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty'];
+/** How many steps a sentence asks for: a number in it, "all the way" for as far as possible, otherwise one. */
+export function stepCount(said: string): number {
+  const t = said.toLowerCase();
+  if (/all the way|as far as|until .*(wall|stop|end)/.test(t)) return 20;
+  if (/\bcouple\b/.test(t)) return 2;
+  if (/\bfew\b|\bseveral\b/.test(t)) return 3;
+  const digits = t.match(/\b(\d{1,2})\b/);
+  if (digits) return Math.max(1, Math.min(20, +digits[1]));
+  for (const w of t.split(/[^a-z]+/)) { const n = NUMBER_WORDS.indexOf(w); if (n >= 1) return n; }
+  return 1;
+}
 import { Slot, type Control } from '../worker/control.js';
 import type { InputMode, LogEntry, SessionInfo, SetKey, Source } from './wire.js';
 
@@ -19,6 +32,8 @@ export interface GameLike {
   save(name: string): Promise<void>;
   load(name: string): Promise<void>;
   tileAction(col: number, row: number): Promise<string | null>;
+  /** the game screen as a PNG (only needed when the model can see) */
+  screenPng?(): Promise<Uint8Array>;
 }
 
 export interface AnswererLike {
@@ -68,6 +83,15 @@ export class Session extends EventEmitter {
   private update(entry: LogEntry, status: LogEntry['status'], text: string) {
     entry.status = status; entry.text = text;
     this.emit('log', entry);
+  }
+
+  /** A short reminder of what is possible here, for when a command could not be matched. */
+  private hint(): string {
+    const acts = this.deps.game.actions;
+    const things = acts.filter((a) => a.kind !== 'press' && a.kind !== 'steps' && a.kind !== 'item').slice(0, 5).map((a) => a.label);
+    const walk = acts.some((a) => a.kind === 'steps') ? ['step up, down, left or right'] : [];
+    const all = [...things, ...walk];
+    return all.length ? ` Here you can: ${all.join(' · ')}.` : '';
   }
 
   // ---- who may act
@@ -271,7 +295,10 @@ export class Session extends EventEmitter {
     }
 
     this.pending = null;
-    const first = await interpreter.interpret(said, game.actions, game.state);
+    // the real Jev is shown the game screen along with the facts; the stand-in cannot see, so no picture is taken for it
+    const sees = this.deps.jev === 'gateway' && process.env.JEV_SEES_SCREEN !== '0';
+    const image = sees && game.screenPng ? await game.screenPng().catch(() => undefined) : undefined;
+    const first = await interpreter.interpret(said, game.actions, game.state, { image });
     if (superseded()) { this.log(source, 'stopped', 'Cancelled.', said); return CANCELLED; }
     const stillNo = this.refusal(source);
     if (stillNo) return stillNo;
@@ -298,7 +325,7 @@ export class Session extends EventEmitter {
       }
       case 'impossible': {
         const message = 'I can only do things you can do from here.';
-        this.log(source, 'failed', message + note, said);
+        this.log(source, 'failed', `${message}${this.hint()}${note}`, said);
         return { status: 'failed', message };
       }
       case 'question': {
@@ -318,10 +345,18 @@ export class Session extends EventEmitter {
         return { status: 'asking', message: `Did you mean: ${first.options.map((o, i) => `${i + 1}) ${o.label}`).join('  ')}` };
       }
       case 'act': {
-        let r = await this.exec(first.action, source, undefined, said, note);
+        const arg = first.action.kind === 'steps' ? stepCount(said) : undefined;
+        let r = await this.exec(first.action, source, arg, said, note);
         if (r.status === 'prompt') {
           // The game asked something. If the same sentence already answers it ("use potion ON PIKACHU"),
           // carry on, but only on a strong match, and only this once.
+          // (a naming screen: the name is in the player's own words, e.g. "new name SHIGERU")
+          const nowNaming = game.actions.find((a) => a.id === 'name');
+          if (nowNaming && !superseded() && !this.refusal(source)) {
+            const done = new Set(first.action.label.toLowerCase().split(/[^a-z]+/));
+            const words = nameWords(said).filter((w) => !done.has(w.toLowerCase()));
+            return words.length ? this.exec({ ...nowNaming, label: `Type ${words.join('').toUpperCase()}` }, source, { text: words.join('') }, undefined) : r;
+          }
           const again = await interpreter.interpret(said, game.actions, game.state, { strict: true, justDid: first.action.label });
           if (!superseded() && !this.refusal(source) && again.kind === 'act' && again.action.id !== first.action.id) r = await this.exec(again.action, source, undefined, undefined);
         }

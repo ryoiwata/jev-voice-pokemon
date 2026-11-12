@@ -56,9 +56,9 @@ describe('Interpreter on the stand-in', () => {
   it('reports busy when only raw buttons are on offer', async () => {
     expect(await standin().interpret('use ember', [A('press:A', 'Press A', { kind: 'press' }), A('wait', 'Wait a moment', { kind: 'press' })], S)).toMatchObject({ kind: 'nothing', reason: 'busy' });
   });
-  it('never offers raw buttons or steps as guesses', async () => {
+  it('never offers raw button presses as guesses', async () => {
     const r = await standin().interpret('press', [...acts, A('steps:left', 'Step left', { kind: 'steps' })], S);
-    if (r.kind === 'clarify') expect(r.options.every((o) => o.kind !== 'press' && o.kind !== 'steps')).toBe(true);
+    if (r.kind === 'clarify') expect(r.options.every((o) => o.kind !== 'press')).toBe(true);
     expect(r.kind).not.toBe('act');
   });
 });
@@ -105,5 +105,68 @@ describe('stand-in guards', () => {
   it('does not act when only the verb matches', async () => {
     expect((await standin().interpret('use potion', acts, S)).kind).toBe('impossible');
     expect((await standin().interpret('talk', acts, S)).kind).toBe('impossible');
+  });
+});
+
+describe('movement is on offer to the model', () => {
+  const walk = [...acts, A('steps:up', 'Step up', { kind: 'steps' }), A('steps:right', 'Step right', { kind: 'steps' }), A('steps:left', 'Step left', { kind: 'steps' })];
+  it('offers steps as options, and never raw button presses', async () => {
+    const spy = new Spy();
+    await new Interpreter(new Jev({ backend: spy, logFile: null }), new StandinJev()).interpret('scoot over to the right please', walk, S);
+    const criteria = (spy.last!.questions.intent as { criteria: Record<string, string> }).criteria;
+    expect(criteria['steps:right']).toBe('Step right');
+    expect(Object.keys(criteria).some((k) => k.startsWith('press:'))).toBe(false);
+  });
+  it('the stand-in reads a loosely phrased step', async () => {
+    expect(await standin().interpret('step to the right please', walk, S)).toMatchObject({ kind: 'act', action: { id: 'steps:right' } });
+    expect(await standin().interpret('step to the right three times please', walk, S)).toMatchObject({ kind: 'act', action: { id: 'steps:right' } });
+  });
+});
+
+describe('what the model is shown', () => {
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+  const full: GameSnapshot = { ...S, x: 3, y: 6, facing: 'up', money: 3000, badges: 1, dialog: 'Hello!',
+    party: [{ slot: 0, speciesId: 1, species: 'SQUIRTLE', nickname: 'SQUIRT', level: 12, hp: 28, maxHp: 35, status: 'OK', types: ['WATER'], moves: [{ id: 1, name: 'BUBBLE', type: 'WATER', power: 20, accuracy: 100, pp: 22, maxPp: 30 }] }],
+    bag: [{ name: 'POTION', qty: 2 }], battle: { kind: 'wild', enemy: { species: 'RATTATA', level: 4, hp: 9, maxHp: 15, status: 'OK' } } };
+
+  it('gets the game’s stats: position, party with HP and moves, bag, money, badges, battle', async () => {
+    const spy = new Spy();
+    await new Interpreter(new Jev({ backend: spy, logFile: null }), new StandinJev()).interpret('open the menu', acts, full);
+    expect(spy.last!.state).toMatchObject({
+      said: 'open the menu', place: 'VIRIDIAN_CITY', player: { x: 3, y: 6, facing: 'up' }, money: 3000, badges: 1, onScreenText: 'Hello!',
+      party: [{ name: 'SQUIRT', species: 'SQUIRTLE', level: 12, hp: '28/35', moves: ['BUBBLE 22/30'] }],
+      bag: ['POTION x2'], battle: { kind: 'wild', enemy: 'RATTATA Lv4', enemyHp: '9/15' },
+    });
+  });
+
+  it('gets the picture of the game screen when one is supplied', async () => {
+    const spy = new Spy();
+    await new Interpreter(new Jev({ backend: spy, logFile: null }), new StandinJev()).interpret('open the menu', acts, full, { image: png });
+    expect(spy.last!.image).toBe(png);
+  });
+
+});
+
+describe('the stand-in understands "in front of"', () => {
+  const room = [A('scenery:0,7@38', 'Go to the bed', { kind: 'go' }), A('scenery:3,4@38', 'Go to the TV', { kind: 'go' }), A('steps:right', 'Step right', { kind: 'steps' })];
+  it.each(['Move in front of the bed', 'go stand by the bed', 'walk over to the bed', 'go next to the bed'])('"%s"', async (said) => {
+    expect(await standin().interpret(said, room, S)).toMatchObject({ kind: 'act', action: { id: 'scenery:0,7@38' } });
+  });
+});
+
+describe('what each option is described as', () => {
+  const room = [A('warp:7,1@38', 'Enter Reds House 1F', { kind: 'door', hint: 'Enter Reds House 1F: go through the door or stairs that lead there' }), A('steps:down', 'Step down', { kind: 'steps', hint: 'Take a step down: the player gave only a direction' })];
+  it('the real model gets the fuller description; the word-matcher gets the plain label', async () => {
+    const spy = new Spy(); (spy as any).name = 'gateway';
+    await new Interpreter(new Jev({ backend: spy, logFile: null }), new StandinJev()).interpret('go downstairs', room, S);
+    expect((spy.last!.questions.intent as any).criteria['steps:down']).toBe('Take a step down: the player gave only a direction');
+    const plain = new Spy();
+    await new Interpreter(new Jev({ backend: plain, logFile: null }), new StandinJev()).interpret('go downstairs', room, S);
+    expect((plain.last!.questions.intent as any).criteria['steps:down']).toBe('Step down');
+  });
+  it('a failed real call falls back to the word-matcher with plain labels', async () => {
+    const down: JevBackend = { name: 'gateway', evaluate: async () => { throw new Error('down'); } };
+    const r = await new Interpreter(new Jev({ backend: down, logFile: null, retries: 0 }), new StandinJev()).interpret('step down', room, S);
+    expect(r).toMatchObject({ kind: 'act', action: { id: 'steps:down' }, fellBack: true });
   });
 });

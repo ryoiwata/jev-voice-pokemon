@@ -27,8 +27,11 @@ export class GatewayJev implements JevBackend {
   async evaluate(req: JevRequest): Promise<JevResult> {
     const res = await this.decide({
       modelId: this.model,
-      // strict JSON only: drops undefined, turns Infinity/NaN into null
-      state: JSON.parse(JSON.stringify(req.state)),
+      // strict JSON only: drops undefined, turns Infinity/NaN into null.
+      // With a picture, the state becomes two parts: the facts as JSON, and the game screen as a PNG.
+      state: req.image
+        ? [{ type: 'json', value: JSON.parse(JSON.stringify(req.state)) }, { type: 'file', mediaType: 'image/png', data: req.image }]
+        : JSON.parse(JSON.stringify(req.state)),
       questions: JSON.parse(JSON.stringify(req.questions)),
       // a stuck request must not hold a command up (normal latency is well under a second)
       abortSignal: AbortSignal.timeout(+(process.env.JEV_TIMEOUT_MS ?? 4000)),

@@ -6,9 +6,11 @@ import type { JevBackend, JevRequest, JevResult, JevAnswer } from './types.js';
  * and nothing cleverer. The real Jev replaces it 1:1 once TYPESAFE_API_KEY is set.
  */
 
-const DROP = new Set(['the', 'a', 'an', 'to', 'with', 'my', 'please', 'at', 'on', 'of', 'in', 'and', 'this', 'that', 'away', 'up', 'now', 'can', 'you', 'i', 'want']);
+const DROP = new Set(['the', 'a', 'an', 'to', 'with', 'my', 'please', 'at', 'on', 'of', 'in', 'and', 'this', 'that', 'away', 'up', 'now', 'can', 'you', 'i', 'want',
+  // where to stand relative to a thing: "in front of the bed", "next to", "over to", "stand by"
+  'front', 'next', 'beside', 'near', 'by', 'over', 'toward', 'towards', 'stand', 'up', 'please']);
 /** verbs say less about which thing is meant than the thing's own name */
-const VERBS = new Set(['walk', 'go', 'move', 'talk', 'speak', 'use', 'examine', 'enter', 'read', 'pick', 'take', 'grab', 'get', 'throw', 'catch', 'open', 'choose', 'select', 'switch', 'look', 'check', 'push', 'press', 'do']);
+const VERBS = new Set(['walk', 'go', 'move', 'talk', 'speak', 'use', 'examine', 'enter', 'read', 'pick', 'take', 'grab', 'get', 'throw', 'catch', 'open', 'choose', 'select', 'switch', 'look', 'check', 'push', 'press', 'do', 'step', 'head']);
 const WHERE = new Set(['north', 'south', 'east', 'west', 'nearest', 'second', 'third', 'fourth', 'fifth', 'sixth', 'here', 'right', 'number']);
 const QUESTION = /\?\s*$|^(what|whats|why|how|who|where|when|which|is|are|does|do|can|could|should|would|will)\b/;
 
@@ -33,6 +35,9 @@ function near(a: string, b: string): boolean {
   return edits + (a.length - i) + (b.length - j) <= 1;
 }
 
+/** how many times: says nothing about which thing was meant */
+const COUNT = /^(\d+|one|two|three|four|five|six|seven|eight|nine|ten|times?|steps?|once|twice|all|way)$/;
+
 /** "don't throw the master ball" must never throw it: a negated sentence is not a command the stand-in can read. */
 const NEGATED = /\b(not|no|never|nope|dont|don't|do not|doesnt|won't|wont|shouldn't|shouldnt|cant|can't)\b/i;
 
@@ -54,7 +59,7 @@ export function score(said: string[], label: string, known: Set<string> = new Se
   }
   // sharing only a verb ("use …") says nothing about which thing was meant
   if (!total || !named) return 0;
-  const content = said.filter((s) => !VERBS.has(s) && !known.has(s));
+  const content = said.filter((s) => !VERBS.has(s) && !known.has(s) && !COUNT.test(s));
   const explained = content.filter((s) => labelTokens.some((t) => near(s, t))).length;
   const saidCover = content.length ? explained / content.length : 1;
   return (hit / total) * saidCover * saidCover;
@@ -68,11 +73,13 @@ export class StandinJev implements JevBackend {
     const words = tokens(said);
     const negated = NEGATED.test(said.replace(/[’]/g, "'"));
     const party: unknown[] = Array.isArray((req.state as any)?.party) ? (req.state as any).party : [];
-    const known = new Set([...party.flatMap((n) => tokens(String(n))), ...tokens(String((req.state as any)?.justDid ?? ''))]);
+    const names = (n: any) => (n && typeof n === 'object' ? [n.name, n.species] : [n]).filter(Boolean).map(String);
+    const known = new Set([...party.flatMap((n) => names(n).flatMap(tokens)), ...tokens(String((req.state as any)?.justDid ?? ''))]);
     const answers: Record<string, JevAnswer> = {};
     for (const [qid, q] of Object.entries(req.questions)) {
       if (q.type === 'boolean') { answers[qid] = { type: 'boolean', probability: 0.5 }; continue; }
       if (q.type === 'score') { answers[qid] = { type: 'score', score: 0 }; continue; }
+      if (q.type === 'box') { answers[qid] = { type: 'box', box: { top: 0, bottom: 1, left: 0, right: 1 } }; continue; } // it cannot see
       const raw: Record<string, number> = {};
       for (const [key, label] of Object.entries(q.criteria)) {
         if (key === '__question') raw[key] = QUESTION.test(said.trim().toLowerCase().replace(/[’']/g, '')) ? 1 : 0;

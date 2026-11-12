@@ -5,7 +5,7 @@ import { StandinJev } from './standin.js';
 import { GatewayJev, typesafeKey } from './gateway.js';
 
 export interface JevCallRecord {
-  n: number; at: number; purpose: string; latencyMs: number; backend: string;
+  n: number; at: number; purpose: string; latencyMs: number; backend: string; sawScreen: boolean;
   state: JevInput; questions: Record<string, JevQuestion>; answers: Record<string, JevAnswer>; inputTokens: number;
 }
 
@@ -51,19 +51,19 @@ export class Jev {
     this.window.push(this.last);
   }
 
-  async ask(purpose: string, state: JevInput, questions: Record<string, JevQuestion>): Promise<{ answers: Record<string, JevAnswer>; confidence?: number }> {
+  async ask(purpose: string, state: JevInput, questions: Record<string, JevQuestion>, image?: Uint8Array): Promise<{ answers: Record<string, JevAnswer>; confidence?: number }> {
     const t0 = Date.now();
     await this.throttle();
     let res;
     for (let attempt = 0; ; attempt++) {
-      try { res = await this.backend.evaluate({ state, questions }); break; }
+      try { res = await this.backend.evaluate({ state, questions, ...(image ? { image } : {}) }); break; }
       catch (e) { if (attempt >= this.retries) throw e; await new Promise((r) => setTimeout(r, 300)); }
     }
     this.calls++;
     this.inputTokens += res.usage.inputTokens ?? 0;
     const rec: JevCallRecord = {
       n: this.calls, at: Date.now(), purpose, latencyMs: Date.now() - t0, backend: this.backend.name,
-      state, questions, answers: res.answers, inputTokens: res.usage.inputTokens ?? 0,
+      state, sawScreen: !!image, questions, answers: res.answers, inputTokens: res.usage.inputTokens ?? 0,
     };
     this.log?.write(JSON.stringify(rec) + '\n');
     return { answers: res.answers, confidence: res.confidence };

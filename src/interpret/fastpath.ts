@@ -37,9 +37,19 @@ export function fastPath(text: string, has: (id: string) => boolean, pending: bo
 
   if ((m = t.match(/^(?:press |push |hit )?(a|b|start|select)(?: button)?$/))) return { kind: 'run', id: `press:${m[1].toUpperCase()}` };
 
-  if ((m = t.match(/^(?:go |walk |move |step )?(up|down|left|right)(?: (\d+|[a-z]+))?(?: steps?| times?)?$/))) {
-    const dir = m[1];
-    const n = m[2] === undefined ? 1 : num(m[2]);
+  // Movement in the ways people say it: "right", "move to the right", "walk up three steps", "go north",
+  // "take 3 steps left", "move two steps to the left". The count may come before or after the direction.
+  const N = '(\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|a)';
+  const D = '(up|down|left|right|north|south|east|west)';
+  const V = '(?:go |walk |move |step |head |take )?';
+  const U = '(?: steps?| times?| tiles?| squares?| spaces?)?';
+  const after = t.match(new RegExp(`^${V}(?:to the |towards? (?:the )?)?${D}(?: ${N})?${U}$`));
+  const before = after ? null : t.match(new RegExp(`^${V}${N}${U} (?:to the |towards? (?:the )?)?${D}$`));
+  if (after || before) {
+    const word = (after ? after[1] : before![2]);
+    const dir = ({ north: 'up', south: 'down', east: 'right', west: 'left' } as Record<string, string>)[word] ?? word;
+    const count = after ? after[2] : before![1];
+    const n = count === undefined || count === 'a' ? 1 : num(count);
     if (n >= 1 && n <= 20) return has(`steps:${dir}`) ? { kind: 'run', id: `steps:${dir}`, arg: n } : n === 1 ? { kind: 'run', id: `press:${dir.toUpperCase()}` } : null;
     return null;
   }

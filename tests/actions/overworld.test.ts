@@ -86,3 +86,46 @@ describe.skipIf(!hasFixture('fx-bedroom'))('click-to-go through the game thread'
     await g.shutdown();
   });
 });
+
+import { buildGrid } from '../../src/game/world.js';
+
+describe.skipIf(!hasFixture('fx-bedroom'))('walking up to something that cannot be stood on', () => {
+  it('goes to the tile in front of it and faces it', () => {
+    const probe = boot('fx-bedroom');
+    const g = buildGrid(probe.emu, probe.rom, probe.gs);
+    // a piece of furniture or wall with open floor directly below it, away from where the player starts
+    let spot: { x: number; y: number } | null = null;
+    for (let y = 0; y < g.h - 1 && !spot; y++) for (let x = 0; x < g.w; x++) {
+      if (!g.walkable(x, y) && g.walkable(x, y + 1) && Math.abs(x - probe.gs.x) + Math.abs(y + 1 - probe.gs.y) > 1) { spot = { x, y }; break; }
+    }
+    expect(spot).toBeTruthy();
+    const ctx = boot('fx-bedroom');
+    const r = runAction(ctx, `tile:${spot!.x},${spot!.y}`);
+    expect(r.status).toBe('done');
+    expect([ctx.gs.x, ctx.gs.y]).toEqual([spot!.x, spot!.y + 1]);
+    expect(ctx.gs.facing).toBe('up');
+  });
+});
+
+describe.skipIf(!hasFixture('fx-bedroom'))('scenery: furniture the game does not treat as a thing', () => {
+  it('lists the bed, the TV and the plant in the bedroom', () => {
+    const labels = listActions(boot('fx-bedroom')).map((a) => a.label);
+    expect(labels).toEqual(expect.arrayContaining(['Go to the bed', 'Go to the TV', 'Go to the plant']));
+  });
+  it('"go to the bed" walks up beside it and faces it', () => {
+    const ctx = boot('fx-bedroom');
+    const bed = listActions(ctx).find((a) => a.label === 'Go to the bed')!;
+    expect(runAction(ctx, bed.id).status).toBe('done');
+    const dx = bed.at!.x - ctx.gs.x, dy = bed.at!.y - ctx.gs.y;
+    expect(Math.abs(dx) + Math.abs(dy)).toBe(1);
+    expect(ctx.gs.facing).toBe(dx < 0 ? 'left' : dx > 0 ? 'right' : dy < 0 ? 'up' : 'down');
+  });
+  it('downstairs lists the table and the bookshelf', () => {
+    const ctx = boot('fx-bedroom');
+    runAction(ctx, listActions(ctx).find((a) => a.id.startsWith('warp:'))!.id);
+    const labels = listActions(ctx).map((a) => a.label);
+    expect(labels.some((l) => /^Go to the table/.test(l))).toBe(true);
+    expect(labels.some((l) => /^Go to the bookshelf/.test(l))).toBe(true);
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+});

@@ -48,3 +48,17 @@ describe('fastPath', () => {
     expect(fastPath('', has, false)).toBeNull();
   });
 });
+
+describe('fastPath: movement however it is phrased', () => {
+  const has = (id: string) => id.startsWith('steps:');
+  it.each([
+    ['Move to the right', 'steps:right', 1], ['go to the left', 'steps:left', 1], ['walk up three steps', 'steps:up', 3],
+    ['move right 2', 'steps:right', 2], ['step down', 'steps:down', 1], ['go north', 'steps:up', 1], ['walk south two', 'steps:down', 2],
+    ['head east', 'steps:right', 1], ['move two steps to the left', 'steps:left', 2], ['take 3 steps up', 'steps:up', 3],
+    ['move one step to the right', 'steps:right', 1], ['go west 4 times', 'steps:left', 4],
+  ])('"%s"', (said, id, n) => { expect(fastPath(said, has, false)).toEqual({ kind: 'run', id, arg: n }); });
+  it('does not mistake other sentences with a direction word for movement', () => {
+    expect(fastPath('talk to the youngster to the north', has, false)).toBeNull();
+    expect(fastPath('use the item on the right', has, false)).toBeNull();
+  });
+});

@@ -13,7 +13,7 @@ export const MAX_STEPS = 20;
 export function listPrimitive(ctx: Ctx): Action[] {
   const out: Action[] = BUTTONS.map((b) => ({ id: `press:${b}`, kind: 'press', label: `Press ${b}` }));
   out.push({ id: 'wait', kind: 'press', label: 'Wait a moment' });
-  if (detectMode(ctx) === 'overworld') for (const d of DIRS) out.push({ id: `steps:${d}`, kind: 'steps', label: `Step ${d}` });
+  if (detectMode(ctx) === 'overworld') for (const d of DIRS) out.push({ id: `steps:${d}`, kind: 'steps', label: `Step ${d}`, hint: `Take plain steps ${d}: only when the player gives just this direction ("go ${d}", "move ${d} a bit") and names no thing or place to go to` });
   return out;
 }
 

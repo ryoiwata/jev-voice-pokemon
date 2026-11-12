@@ -5,6 +5,7 @@ import gen from '../data/generated.json' with { type: 'json' };
 import type { Button } from '../emu/emulator.js';
 import { buildGrid, findPath, DIRS, type Dir, type Grid, type Step } from '../game/world.js';
 import { HOLES } from '../game/regions.js';
+import { LANDMARKS } from '../game/landmarks.js';
 import { sym, mapName } from '../game/symbols.js';
 import { detectMode } from '../game/mode.js';
 import type { Action, ActionResult, Ctx } from './types.js';
@@ -24,7 +25,7 @@ type Target =
   | { kind: 'strength' }
   | { kind: 'start' }
   | { kind: 'item'; name: string }
-  | { kind: 'tile'; x: number; y: number };
+  | { kind: 'tile'; x: number; y: number; face?: { x: number; y: number } };
 
 interface Candidate { action: Action; target: Target; path: Step[] }
 
@@ -75,6 +76,20 @@ function makeUnique(cands: Candidate[], px: number, py: number) {
   }
 }
 
+/**
+ * How to get next to a tile that cannot be stood on (a bed, a table, a wall), to face it. In front (below)
+ * comes first, since that is where one looks at furniture from; then the sides, then behind.
+ */
+function approach(g: Grid, px: number, py: number, x: number, y: number, blocked: Set<string>, surf: boolean): Step[] | null {
+  for (const [dx, dy] of [[0, 1], [-1, 0], [1, 0], [0, -1]]) {
+    const sx = x + dx, sy = y + dy;
+    if (!g.walkable(sx, sy) || blocked.has(`${sx},${sy}`)) continue;
+    const path = sx === px && sy === py ? [] : findPath(g, px, py, (cx, cy) => cx === sx && cy === sy, { blocked, surf, maxNodes: 8000 });
+    if (path) return path;
+  }
+  return null;
+}
+
 function candidates(ctx: Ctx): Candidate[] {
   const { gs, rom } = ctx;
   const g = buildGrid(ctx.emu, rom, gs);
@@ -105,7 +120,7 @@ function candidates(ctx: Ctx): Candidate[] {
     const twin = doors.find((d) => d.target.kind === 'warp' && d.target.dest === dest && adj(d.target.x, d.target.y, w.x, w.y));
     if (twin && twin.path.length <= path.length) continue;
     if (twin) doors.splice(doors.indexOf(twin), 1);
-    doors.push({ action: { id: `warp:${w.x},${w.y}@${gs.mapId}`, kind: 'door', label: `Enter ${pretty(mapName(dest))}`, at: { x: w.x, y: w.y }, distance: path.length }, target: { kind: 'warp', x: w.x, y: w.y, dest }, path });
+    doors.push({ action: { id: `warp:${w.x},${w.y}@${gs.mapId}`, kind: 'door', label: `Enter ${pretty(mapName(dest))}`, hint: `Enter ${pretty(mapName(dest))}: go through the door, stairs or ladder that leads there (this is how to leave, go outside, go upstairs or downstairs toward it)`, at: { x: w.x, y: w.y }, distance: path.length }, target: { kind: 'warp', x: w.x, y: w.y, dest }, path });
   }
   out.push(...doors);
   for (const h of holes) {
@@ -119,7 +134,7 @@ function candidates(ctx: Ctx): Candidate[] {
     const dir: Dir = c.dir === 'north' ? 'up' : c.dir === 'south' ? 'down' : c.dir === 'west' ? 'left' : 'right';
     const exitGoal = (x: number, y: number) => (dir === 'up' && y === -1) || (dir === 'down' && y === g.h) || (dir === 'left' && x === -1) || (dir === 'right' && x === g.w);
     const path = findPath(g, px, py, exitGoal, { blocked, allowExit: exitGoal, surf });
-    add({ id: `exit:${dir}`, kind: 'go', label: `Go ${c.dir} to ${pretty(mapName(c.map))}` }, { kind: 'exit', dir, dest: c.map }, path);
+    add({ id: `exit:${dir}`, kind: 'go', label: `Go ${c.dir} to ${pretty(mapName(c.map))}`, hint: `Go ${c.dir} to ${pretty(mapName(c.map))}: walk off the ${c.dir} edge of this area into the next one` }, { kind: 'exit', dir, dest: c.map }, path);
   }
 
   // people and things standing on the map
@@ -155,6 +170,32 @@ function candidates(ctx: Ctx): Candidate[] {
     const label = HIDDEN_LABEL.find(([re]) => re.test(h.fn))?.[1]
       ?? `Examine the ${h.fn.replace(/^(Print|Display|Open)/, '').replace(/Text$/, '').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase()}`;
     add({ id: `hidden:${h.x},${h.y}@${gs.mapId}`, kind: 'interact', label, at: { x: h.x, y: h.y } }, { kind: 'hidden', x: h.x, y: h.y }, path);
+  }
+
+  // Furniture and scenery (a bed, a table, a bookshelf). The game does not treat these as things, so they
+  // come from a table of tile ids. Touching tiles of the same kind are one piece of furniture.
+  const names = LANDMARKS[g.tileset];
+  if (names) {
+    const taken = new Set(out.map((c) => (c.action.at ? `${c.action.at.x},${c.action.at.y}` : '')));
+    const seen = new Set<string>();
+    for (let y = 0; y < g.h; y++) for (let x = 0; x < g.w; x++) {
+      const name = names[g.tile(x, y)];
+      if (!name || seen.has(`${x},${y}`) || g.walkable(x, y)) continue;
+      const piece: { x: number; y: number }[] = [];
+      const stack = [{ x, y }];
+      while (stack.length) {
+        const t = stack.pop()!;
+        if (t.x < 0 || t.y < 0 || t.x >= g.w || t.y >= g.h || seen.has(`${t.x},${t.y}`) || names[g.tile(t.x, t.y)] !== name) continue;
+        seen.add(`${t.x},${t.y}`); piece.push(t);
+        stack.push({ x: t.x + 1, y: t.y }, { x: t.x - 1, y: t.y }, { x: t.x, y: t.y + 1 }, { x: t.x, y: t.y - 1 });
+      }
+      if (piece.some((t) => taken.has(`${t.x},${t.y}`))) continue; // already a thing in its own right (a TV that is a sign)
+      // stand at whichever of its tiles is quickest to reach, lowest first
+      piece.sort((a, b) => b.y - a.y);
+      let best: { t: { x: number; y: number }; path: Step[] } | null = null;
+      for (const t of piece) { const path = approach(g, px, py, t.x, t.y, blocked, surf); if (path && (!best || path.length < best.path.length)) best = { t, path }; }
+      if (best) add({ id: `scenery:${best.t.x},${best.t.y}@${gs.mapId}`, kind: 'go', label: `Go to the ${name}`, hint: `Go to the ${name}: walk up to it and stand in front of it`, at: best.t }, { kind: 'tile', x: best.t.x, y: best.t.y, face: best.t }, best.path);
+    }
   }
 
   // field moves the party actually knows
@@ -201,8 +242,13 @@ function tileCandidate(ctx: Ctx, x: number, y: number): Candidate | null {
   const md = rom.maps.get(gs.mapId);
   const blocked = new Set([...gs.sprites().filter((sp) => !sp.hidden).map((sp) => `${sp.x},${sp.y}`), ...(md?.warps ?? []).map((w) => `${w.x},${w.y}`)]);
   blocked.delete(`${x},${y}`);
-  const path = findPath(g, gs.x, gs.y, (cx, cy) => cx === x && cy === y, { blocked, surf: gs.walkState === 2, maxNodes: 8000 });
-  return path ? { action: { id: `tile:${x},${y}`, kind: 'tile', label: 'Walk there', distance: path.length }, target: { kind: 'tile', x, y }, path } : null;
+  const surf = gs.walkState === 2;
+  const path = g.walkable(x, y) ? findPath(g, gs.x, gs.y, (cx, cy) => cx === x && cy === y, { blocked, surf, maxNodes: 8000 }) : null;
+  if (path) return { action: { id: `tile:${x},${y}`, kind: 'tile', label: 'Walk there', distance: path.length }, target: { kind: 'tile', x, y }, path };
+  // Not somewhere one can stand (a bed, a table, a wall): walk up to it instead and face it.
+  const near = approach(g, gs.x, gs.y, x, y, blocked, surf);
+  if (near) return { action: { id: `tile:${x},${y}`, kind: 'tile', label: 'Walk up to it', distance: near.length }, target: { kind: 'tile', x, y, face: { x, y } }, path: near };
+  return null;
 }
 
 /** Which action a click on screen tile (col 0-9, row 0-8) means. The player is always drawn at col 4, row 4. */
@@ -330,7 +376,10 @@ export function runOverworld(ctx: Ctx, id: string): ActionResult {
   if (res === 'warped') return { status: 'done', message: `Now in ${pretty(gs.mapName)}.` };
 
   switch (t.kind) {
-    case 'tile': return { status: 'done', message: 'Walked there.' };
+    case 'tile': {
+      if (t.face) { face(ctx, t.face.x, t.face.y); return { status: 'done', message: 'Walked up to it.' }; }
+      return { status: 'done', message: 'Walked there.' };
+    }
     case 'warp': {
       emu.wait(20);
       // the last step onto the door square can be dropped (a press that only turns the player): step onto it first

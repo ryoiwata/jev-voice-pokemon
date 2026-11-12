@@ -68,6 +68,8 @@ In every mode: `Esc` or the Stop button halts whatever is running, the on-screen
 
 ### What you can say
 
+- **Moving about, however you say it:** "move to the right", "go north", "a couple of steps left", "walk up three steps", "all the way down".
+- **Furniture and scenery:** "move in front of the bed", "go to the table", "walk over to the TV". This works where the scenery is in the app's table (`src/game/landmarks.ts`), which so far covers Red's house and Oak's lab; elsewhere, click the spot on the game screen or use steps.
 - **Things on screen, by name:** "talk to the nurse", "enter the Poké Mart", "read the sign", "pick up the item ball", "use the PC", "go north to Route 1".
 - **In battle:** "use Ember", "throw Poké Ball", "switch to Pidgey", "use Potion", "run".
 - **In menus:** say the option: "yes", "no", "item", "Pokémon". "Go back" closes a menu. (The word "save" on its own is the app's quick save; to use the game's own SAVE, open the menu and click it, or press A on it.)
@@ -100,11 +102,14 @@ Adding Pokémon and move names to Wispr Flow's dictionary improves how they are 
 |---|---|
 | `JEV_MODE` | `gateway` (default): the real Jev. `mock`: a free local word-matcher. |
 | `TYPESAFE_API_KEY` | Your TypeSafe key, for the real Jev (early access). With no key, the word-matcher is used whatever the mode. |
+| `JEV_SEES_SCREEN` | `1` (default) sends Jev a picture of the game screen with each command; `0` sends only the facts. |
 | `JEV_MODEL` | `jev-latest` (default), `jev-preview`, or a pinned release such as `jev-1.14.0`. |
 | `ACT_MIN_P`, `ACT_MIN_MARGIN` | How sure Jev must be, and how far ahead of the runner-up, to act without asking (0.6 and 0.2). |
 | `COSTLY_MIN_P`, `COSTLY_MIN_MARGIN` | The same for hard-to-undo actions (0.85 and 0.4). |
 | `ANTHROPIC_API_KEY` | Turns on question answering. Without it everything else still works. |
 | `ANSWER_MODEL` | The Claude model for answers (default `claude-sonnet-5-5`). |
+
+With each command Jev is given the game's facts (where you are and which way you face, your party with HP and moves, your bag, money, badges, any battle, the text on screen) and a picture of the screen. In trials Jev could not recognise things in Game Boy graphics (asked to find the bed, the plant or the player, it rated each "not visible"), so it is the facts and the list of options that do the work; the picture is sent for when its vision improves.
 
 The stand-in matches your words against the names of the things on offer. It handles commands that name the thing ("walk to the Poké Ball", "use Ember") and nothing cleverer. If the real Jev is down or slow, that one command falls back to the stand-in and the log says so.
 

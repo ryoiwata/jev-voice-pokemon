@@ -17,7 +17,10 @@ const PARTY_MENU = [A('menu:PIKACHU', 'PIKACHU', { kind: 'menu' }), A('menu:PIDG
 /** A game that records what it was asked to do. `script` decides each action's result. */
 class FakeGame implements GameLike {
   ctl = new Control();
-  state: any = { mode: 'overworld', map: 'VIRIDIAN_CITY', dialog: '', party: [{ nickname: 'PIKACHU', species: 'PIKACHU' }, { nickname: 'PIDGEY', species: 'PIDGEY' }], running: null };
+  state: any = {
+    mode: 'overworld', map: 'VIRIDIAN_CITY', x: 5, y: 5, facing: 'down', dialog: '', money: 0, badges: 0, bag: [], battle: null, running: null,
+    party: ['PIKACHU', 'PIDGEY'].map((n, slot) => ({ slot, nickname: n, species: n, level: 5, hp: 10, maxHp: 10, status: 'OK', moves: [] })),
+  };
   actions: Action[] = WORLD;
   ran: { id: string; arg?: unknown }[] = [];
   script: (id: string) => ActionResult | Promise<ActionResult> = () => ({ status: 'done', message: 'Done.' });
@@ -26,7 +29,7 @@ class FakeGame implements GameLike {
   stop = vi.fn(() => { this.settle?.({ status: 'stopped', message: 'Stopped.' }); });
   save = vi.fn(async () => {});
   load = vi.fn(async () => {});
-  tileAction = vi.fn(async () => 'tile:3,3' as string | null);
+  tileAction = vi.fn(async (_col: number, _row: number) => 'tile:3,3' as string | null);
   async run(id: string, arg?: unknown): Promise<ActionResult> {
     if (this.busy) this.stop(); // like the real game: a new action replaces the one in progress
     this.ran.push({ id, arg });
@@ -356,5 +359,65 @@ describe('Session: naming screens', () => {
     const r = await s.handleText("let's go with the name", 'human');
     expect(game.ran).toEqual([]);
     expect(r).toEqual({ status: 'failed', message: 'Which name? Say just the name, like "Leo".' });
+  });
+});
+
+describe('Session: movement, names in a follow-up, and saying what is possible', () => {
+  it('a step chosen by the model takes its count from the sentence', async () => {
+    game.actions = [...WORLD, A('steps:right', 'Step right', { kind: 'steps' })];
+    await s.handleText('step to the right three times please', 'human');
+    await s.handleText('step to the right please', 'human');
+    await s.handleText('step all the way to the right please', 'human');
+    expect(game.ran).toEqual([{ id: 'steps:right', arg: 3 }, { id: 'steps:right', arg: 1 }, { id: 'steps:right', arg: 20 }]);
+  });
+
+  it('"let’s name him Shigeru" on the name menu chooses NEW NAME, then types the name', async () => {
+    const NAME_MENU = [A('menu:NEW NAME', 'NEW NAME', { kind: 'menu' }), A('menu:BLUE', 'BLUE', { kind: 'menu' }), A('menu:GARY', 'GARY', { kind: 'menu' })];
+    // the real Jev reads this sentence as "NEW NAME" (seen live at 0.86); the word-matcher cannot, so the model is played here
+    const picks: JevBackend = { name: 'gateway', evaluate: async (): Promise<any> => ({ answers: { intent: { type: 'choice', choice: 'menu:NEW NAME', probabilities: { 'menu:NEW NAME': 0.86, __impossible: 0.09 } } }, usage: {} }) };
+    const g = new FakeGame();
+    const sess = new Session({ game: g, interpreter: new Interpreter(new Jev({ backend: picks, logFile: null }), new StandinJev()), answerer: { enabled: false, answer: async () => '' }, jev: 'standin' });
+    g.actions = NAME_MENU;
+    g.script = (id) => {
+      if (id === 'menu:NEW NAME') { g.actions = [A('name', 'Type a name', { kind: 'name' })]; return { status: 'prompt', message: 'Chose NEW NAME. Now it wants a name.' }; }
+      return { status: 'done', message: 'Typed SHIGERU.' };
+    };
+    await sess.handleText("Let's name him Shigeru", 'human');
+    expect(g.ran).toEqual([{ id: 'menu:NEW NAME', arg: undefined }, { id: 'name', arg: { text: 'Shigeru' } }]);
+  });
+
+  it('when nothing fits, the log says what can be done here', async () => {
+    await s.handleText('move in front of the bed', 'human');
+    expect(last().status).toBe('failed');
+    expect(last().text).toContain('I can only do things you can do from here.');
+    expect(last().text).toContain('Examine the Poké Ball');
+    expect(last().text).toMatch(/step/i);
+    expect(last().text).not.toMatch(/Press A/);
+  });
+});
+
+describe('Session: the real Jev is shown the screen', () => {
+  it('sends a picture of the game with the command when the real Jev is in use', async () => {
+    const g = new FakeGame();
+    const seen: any[] = [];
+    const eyes: JevBackend = { name: 'gateway', evaluate: async (req): Promise<any> => { seen.push(req); return { answers: { intent: { type: 'choice', choice: 'npc:4', probabilities: { 'npc:4': 0.95 } } }, usage: {} }; } };
+    (g as any).screenPng = async () => Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    const sess = new Session({ game: g, interpreter: new Interpreter(new Jev({ backend: eyes, logFile: null }), new StandinJev()), answerer: { enabled: false, answer: async () => '' }, jev: 'gateway' });
+    await sess.handleText('walk to the poke ball', 'human');
+    expect(seen[0].image).toBeInstanceOf(Buffer);
+    expect(g.ran.map((x) => x.id)).toEqual(['npc:4']);
+  });
+  it('takes no picture for the stand-in, which cannot see', async () => {
+    let shots = 0;
+    (game as any).screenPng = async () => { shots++; return Buffer.from([1]); };
+    await s.handleText('walk to the poke ball', 'human');
+    expect(shots).toBe(0);
+  });
+});
+
+import { stepCount } from '../../src/server/session.js';
+describe('stepCount', () => {
+  it.each([['step right', 1], ['a couple of steps left', 2], ['a few steps up', 3], ['go right 4', 4], ['three steps', 3], ['all the way down', 20], ['25 steps', 20]])('%s → %i', (said, n) => {
+    expect(stepCount(said as string)).toBe(n);
   });
 });

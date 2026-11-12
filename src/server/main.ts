@@ -35,7 +35,7 @@ export async function startServer(opts: ServerOpts): Promise<{ game: GameClient;
   const game = await GameClient.start({ romPath: process.env.ROM_PATH ?? 'roms/red.gb', resume, autosave: opts.autosave });
   game.on('log', (kind: string, msg: string) => { if (kind === 'error') console.error(`[game] ${msg}`); });
 
-  const jev = new Jev({ logFile: opts.autosave === false ? null : undefined });
+  const jev = new Jev({ logFile: opts.autosave === false ? (process.env.JEV_LOG_FILE || null) : undefined });
   const answerer = new Answerer();
   const session = new Session({ game, interpreter: new Interpreter(jev, new StandinJev()), answerer, jev: jev.backend.name === 'gateway' ? 'gateway' : 'standin' });
   const recent: LogEntry[] = [];

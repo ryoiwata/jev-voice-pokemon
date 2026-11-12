@@ -22,6 +22,8 @@ export type ActionKind = 'go' | 'door' | 'interact' | 'field' | 'item' | 'move' 
 /** One thing the player could do right now. */
 export interface Action {
   id: string; kind: ActionKind; label: string;
+  /** a fuller description for the model that picks among actions; the label is what the player reads */
+  hint?: string;
   /** hard to undo: needs a closer match before it runs unasked */
   costly?: boolean;
   /** map tile this action is about */
