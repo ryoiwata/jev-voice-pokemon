@@ -4,6 +4,7 @@ import type { Action, ActionResult } from '../actions/types.js';
 import type { GameSnapshot } from '../game/snapshot.js';
 import type { Interpreter } from '../interpret/interpreter.js';
 import { fastPath } from '../interpret/fastpath.js';
+import { nameWords } from '../interpret/name.js';
 import { Slot, type Control } from '../worker/control.js';
 import type { InputMode, LogEntry, SessionInfo, SetKey, Source } from './wire.js';
 
@@ -275,6 +276,19 @@ export class Session extends EventEmitter {
     const stillNo = this.refusal(source);
     if (stillNo) return stillNo;
     const note = first.fellBack ? ' (Jev unavailable, used the stand-in)' : '';
+
+    // A naming screen has one thing to do: type a name. The model can choose that but cannot write the
+    // name, so unless the player asked a question, the name is lifted from their own words.
+    const naming = game.actions.find((a) => a.id === 'name');
+    if (naming && first.kind !== 'question' && first.kind !== 'nothing') {
+      const words = nameWords(said);
+      if (!words.length) {
+        const message = 'Which name? Say just the name, like "Leo".';
+        this.log(source, 'failed', message, said);
+        return { status: 'failed', message };
+      }
+      return this.exec({ ...naming, label: `Type ${words.join('').toUpperCase()}` }, source, { text: words.join('') }, said, note);
+    }
     switch (first.kind) {
       case 'nothing': {
         if (first.reason === 'empty') return { status: 'nothing', message: '' };

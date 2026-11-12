@@ -330,3 +330,31 @@ describe('Session: the player always wins', () => {
     expect(last()).toMatchObject({ status: 'failed', heard: 'walk to the poke ball' });
   });
 });
+
+describe('Session: naming screens', () => {
+  const NAMING = [A('name', 'Type a name', { kind: 'name' }), A('press:A', 'Press A', { kind: 'press' })];
+  it('types the name out of a sentence that is not in the fixed grammar', async () => {
+    game.actions = NAMING;
+    await s.handleText("Let's go with Leo as the name", 'human');
+    expect(game.ran).toEqual([{ id: 'name', arg: { text: 'Leo' } }]);
+  });
+  it('types a name said on its own', async () => {
+    game.actions = NAMING;
+    await s.handleText('Leo', 'human');
+    expect(game.ran).toEqual([{ id: 'name', arg: { text: 'Leo' } }]);
+  });
+  it('joins a two-word name', async () => {
+    game.actions = NAMING;
+    await s.handleText('go with Big Red', 'human');
+    expect(game.ran).toEqual([{ id: 'name', arg: { text: 'BigRed' } }]);
+    game.ran = [];
+    await s.handleText('call it Big Red', 'human');   // the fixed grammar's form; the game drops the space when typing
+    expect(game.ran).toEqual([{ id: 'name', arg: { text: 'Big Red' } }]);
+  });
+  it('asks for the name when the sentence has none in it, and types nothing', async () => {
+    game.actions = NAMING;
+    const r = await s.handleText("let's go with the name", 'human');
+    expect(game.ran).toEqual([]);
+    expect(r).toEqual({ status: 'failed', message: 'Which name? Say just the name, like "Leo".' });
+  });
+});
