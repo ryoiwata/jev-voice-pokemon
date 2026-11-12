@@ -5,9 +5,12 @@
   "scripts": {
     "gen": "tsx scripts/gen-data.ts",
     "setup": "bash scripts/setup.sh",
-    "start": "tsx src/server/main.ts",
-    "typecheck": "tsc",
-    "test": "vitest run"
+    "start": "vite build web && tsx src/server/main.ts",
+    "typecheck": "tsc && tsc -p web",
+    "test": "vitest run",
+    "build:web": "vite build web",
+    "serve": "tsx src/server/main.ts",
+    "dev": "vite web"
   },
   "keywords": [],
   "author": "Christian Mathiesen",
@@ -19,9 +22,15 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^6.3.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
+    "vite": "^8.3.8",
     "vitest": "^5.1.0"
   },
   "type": "module",
