@@ -36,7 +36,7 @@ export function listMenu(ctx: Ctx): Action[] {
       }
       out.push({ id: 'menu:more', kind: 'menu', label: 'Scroll down the list' });
     }
-    if (opts.length) out.push({ id: 'menu:back', kind: 'menu', label: 'Go back / close this menu' });
+    if (opts.length) out.push({ id: 'menu:back', kind: 'menu', label: 'Go back' });
   } else {
     // Text, or a full-screen page such as a Pokédex entry. Some of these wait for A without showing the ▼ prompt,
     // so anything on screen without a cursor can be continued.
@@ -85,7 +85,7 @@ export function runMenu(ctx: Ctx, a: Action, arg?: unknown): ActionResult {
     return outcome(ctx, `Typed ${text}.`);
   }
 
-  if (a.id === 'menu:back') { tap(ctx, 'B', 15); return outcome(ctx, 'Went back.'); }
+  if (a.id === 'menu:back') { tap(ctx, 'B', 15); ctx.emu.wait(30); return outcome(ctx, 'Went back.'); }
   if (a.id === 'menu:more') {
     for (let i = 0; i <= ctx.gs.menu().max; i++) tap(ctx, 'DOWN', 6);
     return { status: 'prompt', message: 'Scrolled down.' };

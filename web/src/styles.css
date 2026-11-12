@@ -57,3 +57,26 @@ kbd { font: 12px var(--mono); border: 1px solid currentColor; border-radius: 5px
 .mute, .sound-on { min-height: 32px; padding: 2px 10px; font-size: 14px; text-transform: none; letter-spacing: 0; }
 .sound-on { margin-left: auto; border-color: var(--low); color: var(--ink); }
 .volume input[type=range] { min-height: 0; padding: 0; width: 110px; accent-color: var(--accent); }
+
+.modes { display: inline-flex; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.modes button { border: 0; border-radius: 0; border-right: 1px solid var(--line); padding: 10px 18px; background: transparent; }
+.modes button:last-child { border-right: 0; }
+.modes button.on { background: var(--accent); color: #06121f; font-weight: 700; }
+.badge { margin-left: auto; font: 12px var(--mono); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; color: var(--dim); }
+.badge.gateway { color: var(--ok); border-color: var(--ok); }
+.command { flex: 1; width: 100%; font-size: 20px; padding: 14px 16px; min-height: 58px; border-width: 2px; }
+.command.listening { border-color: var(--accent); }
+.command::placeholder { color: var(--dim); font-size: 16px; }
+.settings { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 15px; }
+.settings label { display: inline-flex; align-items: center; gap: 8px; }
+.settings select { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-height: 40px; }
+.settings input[type=checkbox] { width: 20px; height: 20px; min-height: 0; accent-color: var(--accent); }
+.settings .keys { flex-basis: 100%; margin: 0; font-size: 13px; }
+.log { max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.entry .heard { color: var(--dim); font-size: 13px; }
+.entry .said { white-space: pre-wrap; }
+.entry .mark { display: inline-block; width: 1.3em; text-align: center; }
+.entry.done .mark { color: var(--ok); } .entry.failed .mark { color: var(--crit); } .entry.stopped .mark { color: var(--low); } .entry.running .mark { color: var(--accent); }
+.entry.asking { border: 1px dashed var(--low); border-radius: 10px; padding: 8px 10px; }
+.choices { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.choices button b { display: inline-block; min-width: 1.4em; color: var(--accent); }

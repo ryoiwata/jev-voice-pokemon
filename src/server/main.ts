@@ -5,7 +5,11 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
 import { GameClient } from './game.js';
-import { parseClientMsg, TAG_FRAME, TAG_AUDIO, type ServerMsg } from './wire.js';
+import { parseClientMsg, TAG_FRAME, TAG_AUDIO, type LogEntry, type ServerMsg } from './wire.js';
+import { Session, type AnswererLike } from './session.js';
+import { Interpreter } from '../interpret/interpreter.js';
+import { Jev } from '../jev/client.js';
+import { StandinJev } from '../jev/standin.js';
 
 const WEB = path.resolve('web/dist');
 const TYPES: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.woff2': 'font/woff2' };
@@ -24,10 +28,15 @@ function tagged(tag: number, bytes: Uint8Array): Buffer {
 
 export interface ServerOpts { port: number; fresh?: boolean; load?: string; autosave?: boolean }
 
-export async function startServer(opts: ServerOpts): Promise<{ game: GameClient; url: string; close(): Promise<void> }> {
+export async function startServer(opts: ServerOpts): Promise<{ game: GameClient; session: Session; url: string; close(): Promise<void> }> {
   const resume = opts.load ?? (opts.fresh ? undefined : 'autosave');
   const game = await GameClient.start({ romPath: process.env.ROM_PATH ?? 'roms/red.gb', resume, autosave: opts.autosave });
   game.on('log', (kind: string, msg: string) => { if (kind === 'error') console.error(`[game] ${msg}`); });
+
+  const jev = new Jev({ logFile: opts.autosave === false ? null : undefined });
+  const answerer: AnswererLike = { enabled: false, answer: async () => "Question answering isn't set up. Add ANTHROPIC_API_KEY to .env." };
+  const session = new Session({ game, interpreter: new Interpreter(jev, new StandinJev()), answerer, jev: jev.backend.name === 'gateway' ? 'gateway' : 'standin' });
+  const recent: LogEntry[] = [];
 
   const server = http.createServer((req, res) => {
     const url = (req.url ?? '/').split('?')[0];
@@ -49,23 +58,32 @@ export async function startServer(opts: ServerOpts): Promise<{ game: GameClient;
   game.on('frame', (f: Uint8Array) => { if (sockets.size) broadcastBin(tagged(TAG_FRAME, f)); });
   game.on('audio', (s: Int16Array) => { if (sockets.size) broadcastBin(tagged(TAG_AUDIO, new Uint8Array(s.buffer, s.byteOffset, s.byteLength))); });
   game.on('state', (state) => broadcast({ type: 'state', state }));
+  session.on('session', (info) => broadcast({ type: 'session', ...info }));
+  session.on('log', (entry: LogEntry) => {
+    const i = recent.findIndex((e) => e.id === entry.id);
+    if (i >= 0) recent[i] = { ...entry }; else { recent.push({ ...entry }); if (recent.length > 100) recent.shift(); }
+    broadcast({ type: 'log', entry });
+  });
 
   const wss = new WebSocketServer({ server, path: "/ws" });
   wss.on('connection', (ws) => {
     sockets.add(ws);
     send(ws, { type: 'state', state: game.state });
     send(ws, { type: 'saves', names: listSaves() });
+    send(ws, { type: 'session', ...session.info() });
+    for (const entry of recent) send(ws, { type: 'log', entry });
     ws.on('message', async (data, isBinary) => {
       if (isBinary) return;
       const m = parseClientMsg(String(data));
       if (!m) return;
       try {
         switch (m.type) {
-          case 'down': game.ctl.press(m.button); break;
-          case 'up': game.ctl.release(m.button); break;
-          case 'tap': game.ctl.press(m.button); setTimeout(() => game.ctl.release(m.button), 100); break;
-          case 'stop': game.stop(); break;
-          case 'click': { const id = await game.tileAction(m.col, m.row); if (id) await game.run(id); break; }
+          case 'down': case 'up': case 'tap': session.rawButton(m.type, m.button); break;
+          case 'stop': session.stop('human'); break;
+          case 'text': await session.handleText(m.text, 'human'); break;
+          case 'choose': await session.choose(m.logId, m.index, 'human'); break;
+          case 'click': await session.click(m.col, m.row); break;
+          case 'set': session.set(m.key, m.value); break;
           case 'save': await game.save(m.name); broadcast({ type: 'saves', names: listSaves() }); break;
           case 'load': await game.load(m.name); break;
         }
@@ -78,7 +96,7 @@ export async function startServer(opts: ServerOpts): Promise<{ game: GameClient;
   await new Promise<void>((resolve) => server.listen(opts.port, '127.0.0.1', resolve));
   const port = (server.address() as { port: number }).port;
   return {
-    game, url: `http://127.0.0.1:${port}`,
+    game, session, url: `http://127.0.0.1:${port}`,
     async close() {
       for (const ws of sockets) ws.terminate();
       await new Promise((r) => server.close(r));
