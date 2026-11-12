@@ -68,3 +68,37 @@ describe.skipIf(!hasFixture('fx-battle'))('battle text', () => {
     expect(adv.due(ctx, 10_000, 100)).toBe(false);
   });
 });
+
+describe.skipIf(!hasFixture('fx-battle'))('the battle menu’s own entries', () => {
+  it('offers FIGHT, PKMN and ITEM as things to open, alongside the moves by name', () => {
+    const acts = listActions(boot('fx-battle'));
+    expect(acts.map((a) => a.id)).toEqual(expect.arrayContaining(['battle:FIGHT', 'battle:PKMN', 'battle:ITEM']));
+    expect(acts.find((a) => a.id === 'battle:FIGHT')!.label).toBe('FIGHT');
+  });
+
+  it('"FIGHT" only opens the move list: no move is used', () => {
+    const ctx = boot('fx-battle');
+    const pp = ctx.gs.party()[0].moves.map((m) => m.pp);
+    expect(runAction(ctx, 'battle:FIGHT').status).toBe('prompt');
+    ctx.emu.wait(120);
+    expect(ctx.gs.party()[0].moves.map((m) => m.pp)).toEqual(pp);
+    const names = ctx.gs.party()[0].moves.map((m) => `menu:${m.name}`);
+    expect(listActions(ctx).map((a) => a.id)).toEqual(expect.arrayContaining([...names, 'menu:back']));
+  });
+
+  it('then naming a move from the open list uses it', () => {
+    const ctx = boot('fx-battle');
+    const m = ctx.gs.party()[0].moves[0];
+    runAction(ctx, 'battle:FIGHT');
+    runAction(ctx, `menu:${m.name}`);
+    for (let i = 0; i < 900 && ctx.gs.party()[0].moves[0].pp === m.pp; i++) ctx.emu.frame();
+    expect(ctx.gs.party()[0].moves[0].pp).toBe(m.pp - 1);
+  });
+
+  it('"go back" from the move list returns to the battle menu', () => {
+    const ctx = boot('fx-battle');
+    runAction(ctx, 'battle:FIGHT');
+    runAction(ctx, 'menu:back');
+    expect(listActions(ctx).map((a) => a.id)).toContain('battle:FIGHT');
+  });
+});

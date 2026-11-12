@@ -32,7 +32,7 @@ export function runAction(ctx: Ctx, id: string, arg?: unknown): ActionResult {
   if (!a) return { status: 'failed', message: "That isn't possible any more." };
   if (mode === 'overworld' && OVERWORLD_ID.test(id)) return runOverworld(ctx, id);
   if (a.kind === 'press' || a.kind === 'steps') return runPrimitive(ctx, a, arg);
-  if (mode === 'battle' && isBattleMenu(ctx)) return runBattle(ctx, a);
+  if (mode === 'battle' && isBattleMenu(ctx) && a.id !== 'menu:back') return runBattle(ctx, a);
   if (a.kind === 'menu' || a.kind === 'text' || a.kind === 'name') return runMenu(ctx, a, arg);
   return runPrimitive(ctx, a, arg);
 }

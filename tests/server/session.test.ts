@@ -421,3 +421,22 @@ describe('stepCount', () => {
     expect(stepCount(said as string)).toBe(n);
   });
 });
+
+describe('Session: opening a menu never picks from it', () => {
+  it('"attack" opens FIGHT and stops, even if the model would then favour a move', async () => {
+    const MOVES = [A('menu:SCRATCH', 'SCRATCH', { kind: 'menu' }), A('menu:GROWL', 'GROWL', { kind: 'menu' })];
+    // the model as it behaved live: FIGHT for the first question, then SCRATCH (here: very sure) for the follow-up
+    const eager: JevBackend = { name: 'gateway', evaluate: async (req): Promise<any> => {
+      const c = (req.questions.intent as any).criteria;
+      const pick = c['battle:FIGHT'] ? 'battle:FIGHT' : 'menu:SCRATCH';
+      return { answers: { intent: { type: 'choice', choice: pick, probabilities: { [pick]: 0.99 } } }, usage: {} };
+    } };
+    const g = new FakeGame();
+    const sess = new Session({ game: g, interpreter: new Interpreter(new Jev({ backend: eager, logFile: null }), new StandinJev()), answerer: { enabled: false, answer: async () => '' }, jev: 'standin' });
+    g.actions = [A('battle:FIGHT', 'FIGHT', { kind: 'menu' }), A('move:SCRATCH', 'Use SCRATCH', { kind: 'move' })];
+    g.script = () => { g.actions = MOVES; return { status: 'prompt', message: 'Opened FIGHT. Now choose.' }; };
+    const r = await sess.handleText('attack', 'human');
+    expect(g.ran.map((x) => x.id)).toEqual(['battle:FIGHT']);
+    expect(r.status).toBe('prompt');
+  });
+});

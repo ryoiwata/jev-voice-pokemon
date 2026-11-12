@@ -347,7 +347,9 @@ export class Session extends EventEmitter {
       case 'act': {
         const arg = first.action.kind === 'steps' ? stepCount(said) : undefined;
         let r = await this.exec(first.action, source, arg, said, note);
-        if (r.status === 'prompt') {
+        // Opening a menu (FIGHT, the bag, the START menu) is the whole command: what to pick inside is the player's call.
+        const opener = first.action.id.startsWith('battle:') || first.action.id === 'start';
+        if (r.status === 'prompt' && !opener) {
           // The game asked something. If the same sentence already answers it ("use potion ON PIKACHU"),
           // carry on, but only on a strong match, and only this once.
           // (a naming screen: the name is in the player's own words, e.g. "new name SHIGERU")

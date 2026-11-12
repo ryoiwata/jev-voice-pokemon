@@ -15,7 +15,8 @@ const screenText = (ctx: Ctx) => ctx.gs.screen().rows.join(' ').replace(/[┌─
 /** The options of the menu that has the cursor, with repeated labels numbered ("-", "- (2)"). */
 function options(ctx: Ctx): Label[] {
   const seen = new Map<string, number>();
-  return readMenuOptions(ctx).map((o) => {
+  // ("-" is an empty slot in a move list: nothing to choose)
+  return readMenuOptions(ctx).filter((o) => o.text !== '-').map((o) => {
     const n = (seen.get(o.text) ?? 0) + 1;
     seen.set(o.text, n);
     return n > 1 ? { ...o, text: `${o.text} (${n})` } : o;

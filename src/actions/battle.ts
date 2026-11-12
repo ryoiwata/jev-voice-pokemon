@@ -35,11 +35,17 @@ export function listBattle(ctx: Ctx): Action[] {
   const { gs } = ctx;
   if (isSafari(ctx)) return SAFARI.map(([id, label]) => ({ id, kind: id === 'run' ? 'run' : 'item', label }));
   const b = gs.battle();
-  const out: Action[] = [];
-  for (const mv of b.player.moves) out.push({ id: `move:${mv.name}`, kind: 'move', label: `Use ${mv.name}` });
+  // The menu's own entries come first. Saying "fight" opens the move list and stops there: which move to use is
+  // the player's call. A move, item or Pokémon named outright ("use tackle") is still done in one go.
+  const out: Action[] = [
+    { id: 'battle:FIGHT', kind: 'menu', label: 'FIGHT', hint: 'FIGHT: open the list of moves and wait. Choose this when the player says fight or attack WITHOUT naming a move' },
+    { id: 'battle:PKMN', kind: 'menu', label: 'PKMN', hint: 'PKMN: open the list of the player\'s Pokémon and wait. Choose this when the player says Pokémon or switch WITHOUT naming one' },
+    { id: 'battle:ITEM', kind: 'menu', label: 'ITEM', hint: 'ITEM: open the bag and wait. Choose this when the player says item or bag WITHOUT naming an item' },
+  ];
+  for (const mv of b.player.moves) out.push({ id: `move:${mv.name}`, kind: 'move', label: `Use ${mv.name}`, hint: `Use the move ${mv.name}: only when the player names this move` });
   for (const p of gs.party()) {
     if (p.slot === b.player.slot || p.hp === 0) continue;
-    out.push({ id: `switch:${p.slot}`, kind: 'switch', label: `Switch to ${p.nickname}` });
+    out.push({ id: `switch:${p.slot}`, kind: 'switch', label: `Switch to ${p.nickname}`, hint: `Switch to ${p.nickname}: only when the player names this Pokémon` });
   }
   for (const it of gs.bag()) {
     if (BALL.test(it.name)) {
@@ -65,6 +71,12 @@ export function runBattle(ctx: Ctx, a: Action): ActionResult {
 
   const [kind, rest] = [a.id.split(':')[0], a.id.slice(a.id.indexOf(':') + 1)];
   switch (kind) {
+    case 'battle': {
+      // open that part of the menu and leave the choice inside it to the player
+      if (!select(ctx, rest)) return { status: 'failed', message: `${rest} didn't open.` };
+      ctx.emu.wait(20);
+      return { status: 'prompt', message: `Opened ${rest}. Now choose.` };
+    }
     case 'move': {
       const mv = gs.battle().player.moves.find((m) => m.name === rest);
       if (mv && mv.pp === 0 && gs.battle().player.moves.some((m) => m.pp > 0)) return { status: 'failed', message: `No PP left for ${rest}.` };

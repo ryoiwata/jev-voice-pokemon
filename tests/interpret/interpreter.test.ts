@@ -170,3 +170,13 @@ describe('what each option is described as', () => {
     expect(r).toMatchObject({ kind: 'act', action: { id: 'steps:down' }, fellBack: true });
   });
 });
+
+describe('"fight" opens the move list; it does not pick a move', () => {
+  const menu = [A('battle:FIGHT', 'FIGHT', { kind: 'menu' }), A('battle:PKMN', 'PKMN', { kind: 'menu' }), A('battle:ITEM', 'ITEM', { kind: 'menu' }),
+    A('move:TACKLE', 'Use TACKLE', { kind: 'move' }), A('move:TAIL WHIP', 'Use TAIL WHIP', { kind: 'move' })];
+  it('on the word-matcher', async () => {
+    expect(await standin().interpret('fight', menu, S)).toMatchObject({ kind: 'act', action: { id: 'battle:FIGHT' } });
+    expect(await standin().interpret('use tackle', menu, S)).toMatchObject({ kind: 'act', action: { id: 'move:TACKLE' } });
+    expect(await standin().interpret('tackle', menu, S)).toMatchObject({ kind: 'act', action: { id: 'move:TACKLE' } });
+  });
+});
