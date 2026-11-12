@@ -16,6 +16,7 @@
   "author": "Christian Mathiesen",
   "license": "GPL-2.0-or-later",
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
     "ai": "^7.0.113",
     "serverboy": "^0.0.7",
     "ws": "^8.21.3"

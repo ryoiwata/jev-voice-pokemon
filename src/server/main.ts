@@ -6,7 +6,8 @@ import { pathToFileURL } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
 import { GameClient } from './game.js';
 import { parseClientMsg, TAG_FRAME, TAG_AUDIO, type LogEntry, type ServerMsg } from './wire.js';
-import { Session, type AnswererLike } from './session.js';
+import { Session } from './session.js';
+import { Answerer } from '../answer/answerer.js';
 import { Interpreter } from '../interpret/interpreter.js';
 import { Jev } from '../jev/client.js';
 import { StandinJev } from '../jev/standin.js';
@@ -34,7 +35,7 @@ export async function startServer(opts: ServerOpts): Promise<{ game: GameClient;
   game.on('log', (kind: string, msg: string) => { if (kind === 'error') console.error(`[game] ${msg}`); });
 
   const jev = new Jev({ logFile: opts.autosave === false ? null : undefined });
-  const answerer: AnswererLike = { enabled: false, answer: async () => "Question answering isn't set up. Add ANTHROPIC_API_KEY to .env." };
+  const answerer = new Answerer();
   const session = new Session({ game, interpreter: new Interpreter(jev, new StandinJev()), answerer, jev: jev.backend.name === 'gateway' ? 'gateway' : 'standin' });
   const recent: LogEntry[] = [];
 
