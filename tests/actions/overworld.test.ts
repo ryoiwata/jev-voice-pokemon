@@ -129,3 +129,35 @@ describe.skipIf(!hasFixture('fx-bedroom'))('scenery: furniture the game does not
     expect(new Set(labels).size).toBe(labels.length);
   });
 });
+
+describe.skipIf(!hasFixture('fx-pallet'))('people are described, not just named', () => {
+  it('tells the model what kind of person each one is and where they are', () => {
+    const acts = listActions(boot('fx-pallet'));
+    const fisher = acts.find((a) => a.label.startsWith('Talk to Fisher'))!;
+    const girl = acts.find((a) => a.label.startsWith('Talk to Girl'))!;
+    expect(fisher.hint).toMatch(/a man/);
+    expect(girl.hint).toMatch(/a girl/);
+    expect(fisher.hint).toMatch(/steps? away/);
+    expect(fisher.hint).toMatch(/left|right|above|below/);
+  });
+});
+
+describe.skipIf(!hasFixture('fx-pallet'))('the START menu’s entries, said directly', () => {
+  it('offers saving and the other entries without opening the menu first', () => {
+    const acts = listActions(boot('fx-pallet'));
+    expect(acts.find((a) => a.id === 'startmenu:SAVE')).toMatchObject({ label: 'Save the game' });
+    expect(acts.map((a) => a.id)).toEqual(expect.arrayContaining(['startmenu:ITEM', 'startmenu:OPTION']));
+  });
+  it('"save the game" opens the menu, chooses SAVE, and stops at the game’s own "save?" question', () => {
+    const ctx = boot('fx-pallet');
+    const r = runAction(ctx, 'startmenu:SAVE');
+    expect(r.status).toBe('prompt');
+    expect(ctx.gs.screen().rows.join(' ')).toMatch(/SAVE/);
+    const acts = listActions(ctx);
+    expect(acts.map((a) => a.id)).toEqual(expect.arrayContaining(['menu:YES', 'menu:NO']));
+    expect(acts.find((a) => a.id === 'menu:YES')!.costly).toBe(true);
+  });
+  it('the Pokémon list is only offered once there is a Pokémon', () => {
+    expect(listActions(boot('fx-pallet')).some((a) => a.id === 'startmenu:POKéMON')).toBe(false);
+  });
+});

@@ -87,7 +87,9 @@ export function readMenuOptions(ctx: Ctx): Label[] {
   if (!s.cursor) return [];
   if (isPartyMenu(ctx)) return ctx.gs.party().map((p, i) => ({ text: p.nickname, x: 3, y: i * 2, index: i }));
   const { topY, topX, max } = ctx.gs.menu();
-  const clean = (t: string) => t.replace(/[┌─┐│└┘▶▷▼]/g, ' ').replace(/\s{2,}.*$/, '').trim();
+  // A small box (YES/NO) can sit on top of a bigger one, so the label ends at the box's own right edge:
+  // "▶YES│IME 0 00│" is YES, not "YES IME".
+  const clean = (t: string) => t.replace(/[▶▷▼]/g, ' ').replace(/^[\s┌─┐│└┘]+/, '').replace(/[┌─┐│└┘].*$/, '').replace(/\s{2,}.*$/, '').trim();
   const opts: Label[] = [];
   // Try register layout first (step 2, then 1) — only when the cursor really is in that column (else text
   // drawn behind a small box, like a YES/NO over a patterned floor, gets read instead of the options)

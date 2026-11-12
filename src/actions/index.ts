@@ -18,7 +18,7 @@ export function listActions(ctx: Ctx): Action[] {
   return out;
 }
 
-const OVERWORLD_ID = /^(warp|exit|npc|sign|hidden|scenery|cut|surf|item|tile):|^(strength|start)$/; // positional ids end in @<map id>
+const OVERWORLD_ID = /^(warp|exit|npc|sign|hidden|scenery|startmenu|cut|surf|item|tile):|^(strength|start)$/; // positional ids end in @<map id>
 
 /**
  * Carry out one listed action. The id is looked up in a fresh list first, so an action that

@@ -70,9 +70,11 @@ In every mode: `Esc` or the Stop button halts whatever is running, the on-screen
 
 - **Moving about, however you say it:** "move to the right", "go north", "a couple of steps left", "walk up three steps", "all the way down".
 - **Furniture and scenery:** "move in front of the bed", "go to the table", "walk over to the TV". This works where the scenery is in the app's table (`src/game/landmarks.ts`), which so far covers Red's house and Oak's lab; elsewhere, click the spot on the game screen or use steps.
+- **People by what they look like:** "talk to the man", "talk to the girl", "the nearest person". Each character is described to Jev (a man, an old woman, the nurse) along with where they stand.
+- **The menu's entries, directly:** "save the game", "open my bag", "check my trainer card", "open the Pokédex". Saving stops at the game's own "Would you like to SAVE?" for your yes or no.
 - **Things on screen, by name:** "talk to the nurse", "enter the Poké Mart", "read the sign", "pick up the item ball", "use the PC", "go north to Route 1".
 - **In battle:** "use Ember", "throw Poké Ball", "switch to Pidgey", "use Potion", "run".
-- **In menus:** say the option: "yes", "no", "item", "Pokémon". "Go back" closes a menu. (The word "save" on its own is the app's quick save; to use the game's own SAVE, open the menu and click it, or press A on it.)
+- **In menus:** say the option: "yes", "no", "item", "Pokémon". "Go back" closes a menu. (The word "save" on its own is the app's quick save; "save the game" is the game's own SAVE.)
 - **Always, with no AI involved:** "stop", "next", "left three", "press A", "start", "save", "load", "name him Sparky" (on a naming screen).
 - **Questions:** anything phrased as a question goes to Claude with your current party, bag and location.
 

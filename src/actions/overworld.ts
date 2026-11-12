@@ -9,7 +9,7 @@ import { LANDMARKS } from '../game/landmarks.js';
 import { sym, mapName } from '../game/symbols.js';
 import { detectMode } from '../game/mode.js';
 import type { Action, ActionResult, Ctx } from './types.js';
-import { closeMenus, openStart, slotWithMove, tap, useFieldMove, useItem } from './nav.js';
+import { closeMenus, openStart, select, slotWithMove, tap, useFieldMove, useItem } from './nav.js';
 import { interruption } from './primitive.js';
 
 const SPRITES = (gen as any).sprites as Record<string, string>;
@@ -24,6 +24,7 @@ type Target =
   | { kind: 'surf'; x: number; y: number }
   | { kind: 'strength' }
   | { kind: 'start' }
+  | { kind: 'startmenu'; entry: string }
   | { kind: 'item'; name: string }
   | { kind: 'tile'; x: number; y: number; face?: { x: number; y: number } };
 
@@ -42,6 +43,19 @@ function interactGoal(g: Grid, tx: number, ty: number) {
     return false;
   };
 }
+
+/** What kind of person each sprite shows, so "talk to the man" or "the old lady" can be matched to someone. */
+const PEOPLE: Record<string, string> = {
+  YOUNGSTER: 'a boy', LITTLE_BOY: 'a little boy', GAMEBOY_KID: 'a kid playing a Game Boy', LITTLE_GIRL: 'a little girl', GIRL: 'a girl', BRUNETTE_GIRL: 'a girl with brown hair',
+  COOLTRAINER_F: 'a woman, a trainer', COOLTRAINER_M: 'a man, a trainer', BEAUTY: 'a young woman', MIDDLE_AGED_WOMAN: 'a woman', MIDDLE_AGED_MAN: 'a man', BALDING_GUY: 'a balding man',
+  GAMBLER: 'a man, a gambler', GAMBLER_ASLEEP: 'a sleeping man', SUPER_NERD: 'a man with glasses', HIKER: 'a big man, a hiker', GENTLEMAN: 'an old gentleman', GRAMPS: 'an old man', GRANNY: 'an old woman',
+  FISHER: 'a man', FISHING_GURU: 'a man, the fishing guru', SAILOR: 'a sailor, a man', BIKER: 'a biker, a man', ROCKER: 'a man, a rocker', SWIMMER: 'a swimmer', COOK: 'a cook, a man', WAITER: 'a waiter',
+  SCIENTIST: 'a scientist, a man in a lab coat', ROCKET: 'a Team Rocket member', CHANNELER: 'a channeler, a woman', GUARD: 'a guard', CLERK: 'the shop clerk', BIKE_SHOP_CLERK: 'the bike shop clerk',
+  NURSE: 'the nurse who heals Pokémon', LINK_RECEPTIONIST: 'a receptionist', GYM_GUIDE: 'the gym guide, a man', SAFARI_ZONE_WORKER: 'a Safari Zone worker', SILPH_WORKER_F: 'a woman, an office worker', SILPH_WORKER_M: 'a man, an office worker',
+  MOM: 'your mother', OAK: 'Professor Oak, an old man', BLUE: 'your rival', DAISY: "your rival's sister, a young woman", MR_FUJI: 'Mr. Fuji, an old man', GIOVANNI: 'Giovanni, a man in a suit', WARDEN: 'the warden, an old man',
+  CAPTAIN: 'the ship captain', SILPH_PRESIDENT: 'the company president, an old man', KOGA: 'Koga, the gym leader', LANCE: 'Lance', AGATHA: 'Agatha, an old woman', BRUNO: 'Bruno', LORELEI: 'Lorelei',
+  MONSTER: 'a Pokémon', BIRD: 'a bird Pokémon', FAIRY: 'a small Pokémon', SEEL: 'a Pokémon',
+};
 
 const OBJECTS: Record<string, string> = {
   POKE_BALL: 'Poké Ball', FOSSIL: 'fossil', BOULDER: 'boulder', POKEDEX: 'Pokédex', CLIPBOARD: 'clipboard', PAPER: 'paper', OLD_AMBER: 'amber stone', SNORLAX: 'sleeping Snorlax',
@@ -148,7 +162,9 @@ function candidates(ctx: Ctx): Candidate[] {
       : boulder ? 'Go to the boulder'
       : OBJECTS[name] ? `Examine the ${OBJECTS[name]}`
       : `Talk to ${pretty(obj?.trainerClass ?? name)}`;
-    add({ id: `npc:${sp.index}@${gs.mapId}`, kind: 'interact', label, at: { x: sp.x, y: sp.y } }, { kind: 'npc', index: sp.index, x: sp.x, y: sp.y, talk: !boulder }, path);
+    const who = obj?.item == null && !OBJECTS[name] ? PEOPLE[name] : undefined;
+    // lead with what the player would call them ("the man"); the game's own name for the sprite comes second
+    add({ id: `npc:${sp.index}@${gs.mapId}`, kind: 'interact', label, ...(who ? { hint: `Talk to ${who} (a person; the game calls this one ${pretty(obj?.trainerClass ?? name)})${obj?.trainer ? ', who may challenge you to a battle' : ''}` } : {}), at: { x: sp.x, y: sp.y } }, { kind: 'npc', index: sp.index, x: sp.x, y: sp.y, talk: !boulder }, path);
   }
 
   for (const sg of md?.signs ?? []) {
@@ -223,8 +239,36 @@ function candidates(ctx: Ctx): Candidate[] {
 
   makeUnique(out, px, py);
   out.sort((a, b) => a.path.length - b.path.length);
+  // tell the model where each thing is, so "the man on the left" or "the nearest door" can be worked out
+  // (in the words a player uses looking at the screen: left/right/above/below, and which of its kind is nearest)
+  const nearestOf = new Map<string, Candidate>();
+  for (const c of out) {
+    if (!c.action.at) continue;
+    const kind = c.action.id.split(':')[0];
+    if (!nearestOf.has(kind)) nearestOf.set(kind, c); // `out` is sorted nearest first
+  }
+  const KIND: Record<string, string> = { npc: 'person or thing', sign: 'sign', warp: 'door', scenery: 'piece of furniture', hidden: 'object' };
+  for (const c of out) {
+    if (!c.action.at) continue;
+    const n = c.path.length, dx = c.action.at.x - px, dy = c.action.at.y - py;
+    const side = [dx < 0 ? 'to the left' : dx > 0 ? 'to the right' : '', dy < 0 ? 'above' : dy > 0 ? 'below' : ''].filter(Boolean).join(' and ') || 'right here';
+    const kind = c.action.id.split(':')[0];
+    const nearest = nearestOf.get(kind) === c && KIND[kind] && out.filter((o) => o.action.id.startsWith(`${kind}:`)).length > 1 ? `; the nearest ${KIND[kind]}` : '';
+    c.action.hint = `${c.action.hint ?? c.action.label} [${side} of the player, ${n} ${n === 1 ? 'step' : 'steps'} away${nearest}]`;
+  }
 
-  out.push({ action: { id: 'start', kind: 'interact', label: 'Open the menu' }, target: { kind: 'start' }, path: [] });
+  out.push({ action: { id: 'start', kind: 'interact', label: 'Open the menu', hint: 'Open the START menu and wait: only when the player asks for the menu itself' }, target: { kind: 'start' }, path: [] });
+  // The START menu's entries, so "save the game" or "open the bag" need not be said in two steps.
+  // Each one opens that entry and stops; anything the game asks next ("Would you like to SAVE?") is the player's to answer.
+  const entries: [id: string, onScreen: string, label: string, hint: string][] = [
+    ['SAVE', 'SAVE', 'Save the game', 'Save the game: open the menu and choose SAVE (the game then asks to confirm)'],
+    ['ITEM', 'ITEM', 'Open the bag', 'Open the bag: see the items you carry'],
+    ['OPTION', 'OPTION', 'Open the options', 'Open the game options (text speed, battle animation, battle style)'],
+    ['TRAINER', gs.playerName, 'Open the trainer card', 'Open the trainer card: your name, money, badges and play time'],
+  ];
+  if (gs.party().length) entries.unshift(['POKéMON', 'POKéMON', 'Open the Pokémon list', 'Open the list of your Pokémon: check them, reorder them'])
+  if (gs.event('EVENT_GOT_POKEDEX')) entries.unshift(['POKéDEX', 'POKéDEX', 'Open the Pokédex', 'Open the Pokédex: the list of Pokémon seen and caught']);
+  for (const [id, entry, label, hint] of entries) out.push({ action: { id: `startmenu:${id}`, kind: 'interact', label, hint }, target: { kind: 'startmenu', entry }, path: [] });
   for (const it of gs.bag()) out.push({ action: { id: `item:${it.name}`, kind: 'item', label: `Use ${it.name}` }, target: { kind: 'item', name: it.name }, path: [] });
   return out;
 }
@@ -440,6 +484,14 @@ export function runOverworld(ctx: Ctx, id: string): ActionResult {
     case 'start': {
       if (!openStart(ctx)) return { status: 'failed', message: "The menu didn't open." };
       return { status: 'prompt', message: 'Opened the menu.' };
+    }
+    case 'startmenu': {
+      if (!openStart(ctx)) return { status: 'failed', message: "The menu didn't open." };
+      if (!select(ctx, t.entry)) { closeMenus(ctx); return { status: 'failed', message: `${c.action.label}: that isn't in the menu yet.` }; }
+      // some entries draw in stages (SAVE shows your progress, then asks): wait for the game to be ready for an answer
+      for (let f = 0; f < 600 && !gs.screen().cursor; f++) emu.frame();
+      emu.wait(20);
+      return { status: 'prompt', message: `${c.action.label}.` };
     }
     case 'item': {
       if (!useItem(ctx, t.name)) { closeMenus(ctx); return { status: 'failed', message: `Couldn't use ${t.name}.` }; }
