@@ -70,6 +70,9 @@ export class GameClient extends EventEmitter {
     if (this.current) this.ctl.set(Slot.STOP, 1);
   }
 
+  /** Which action a click on screen tile (col 0-9, row 0-8) means, or null when the player can't walk. */
+  tileAction(col: number, row: number): Promise<string | null> { return this.call('tile', { col, row }); }
+
   save(name: string): Promise<void> { return this.call('save', { name }); }
 
   async load(name: string): Promise<void> {

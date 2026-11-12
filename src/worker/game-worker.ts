@@ -10,8 +10,9 @@ import { Rom } from '../game/rom.js';
 import { GameState } from '../game/state.js';
 import { snapshot, type GameSnapshot } from '../game/snapshot.js';
 import { newMemory, type Ctx, type ActionResult } from '../actions/types.js';
-import { listActions, runAction } from '../actions/index.js';
-import { tap } from '../actions/nav.js';
+import { listActions, runAction, tileAction } from '../actions/index.js';
+import { tap, isNamingScreen } from '../actions/nav.js';
+import { detectMode } from '../game/mode.js';
 import { Control, Slot, StopError } from './control.js';
 
 const { sab, romPath, resume, autosave } = workerData as { sab: SharedArrayBuffer; romPath: string; resume?: string; autosave: boolean };
@@ -119,11 +120,14 @@ let advText = '', advSince = Date.now();
 function autoAdvance() {
   if (!ctl.get(Slot.AUTO_ADVANCE)) { advText = ''; return; }
   const s = gs.screen();
-  if (s.cursor || !s.hasTextBox) { advText = ''; advSince = Date.now(); return; }
-  // the ▼ prompt blinks, so the text is compared without it and a blink doesn't restart the clock
-  const text = s.dialog.replace(/▼/g, '').trim();
+  if (s.cursor || detectMode(ctx) !== 'dialog' || isNamingScreen(ctx)) { advText = ''; advSince = Date.now(); return; }
+  // the ▼ prompt blinks, so the text is compared without it and a blink doesn't restart the clock.
+  // A full-screen page with no text box (a Pokédex entry) is compared as a whole.
+  const text = (s.hasTextBox ? s.dialog : s.rows.join('')).replace(/▼/g, '').trim();
+  if (!text) { advText = ''; advSince = Date.now(); return; }
   if (text !== advText) { advText = text; advSince = Date.now(); return; }
-  if (s.waitingForA && Date.now() - advSince >= ctl.get(Slot.ADVANCE_PACE_MS)) { tap(ctx, 'A', 4); advText = ''; advSince = Date.now(); }
+  // (not every finished text box shows the ▼ prompt, so unchanged text is the signal)
+  if (Date.now() - advSince >= ctl.get(Slot.ADVANCE_PACE_MS)) { tap(ctx, 'A', 4); advText = ''; advSince = Date.now(); }
 }
 
 // ---- requests from the main thread (handled between idle frames)
@@ -133,6 +137,7 @@ port.on('message', (m: { id: number; op: string; args: any }) => {
   try {
     switch (m.op) {
       case 'run': result = run(m.args.id, m.args.arg); break;
+      case 'tile': result = tileAction(ctx, m.args.col, m.args.row); break;
       case 'save': save(m.args.name); break;
       case 'load': {
         if (!fs.existsSync(statePath(m.args.name))) throw new Error(`No save called "${m.args.name}".`);

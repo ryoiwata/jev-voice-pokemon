@@ -65,6 +65,7 @@ export async function startServer(opts: ServerOpts): Promise<{ game: GameClient;
           case 'up': game.ctl.release(m.button); break;
           case 'tap': game.ctl.press(m.button); setTimeout(() => game.ctl.release(m.button), 100); break;
           case 'stop': game.stop(); break;
+          case 'click': { const id = await game.tileAction(m.col, m.row); if (id) await game.run(id); break; }
           case 'save': await game.save(m.name); broadcast({ type: 'saves', names: listSaves() }); break;
           case 'load': await game.load(m.name); break;
         }
