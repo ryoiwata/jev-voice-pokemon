@@ -1,6 +1,8 @@
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
 
+import { type Control, Slot, StopError } from '../worker/control.js';
+
 const require = createRequire(import.meta.url);
 const Gameboy = require('serverboy');
 
@@ -16,6 +18,10 @@ export class Emulator {
     this.gb = new Gameboy();
     this.gb.loadRom(rom);
   }
+
+  private ctl?: Control;
+  /** Let stop and human-held buttons reach the emulator from another thread. */
+  attachControl(ctl: Control) { this.ctl = ctl; }
 
   /** Called for every stereo audio sample pair (≈44.15 kHz, floats in [-1,1]). */
   onAudio?: (l: number, r: number) => void;
@@ -39,6 +45,11 @@ export class Emulator {
 
   /** Advance one frame, optionally holding buttons during it. */
   frame(hold: Button[] = []) {
+    const ctl = this.ctl;
+    if (ctl) {
+      if (ctl.get(Slot.RUNNING)) { if (ctl.get(Slot.STOP)) throw new StopError(); }
+      else if (ctl.get(Slot.HELD)) hold = [...hold, ...ctl.heldButtons()];
+    }
     if (hold.length) this.gb.pressKeys(hold);
     this.gb.doFrame();
     this.frames++;
