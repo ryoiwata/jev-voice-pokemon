@@ -96,7 +96,7 @@ function pushActions() {
 function run(id: string, arg: unknown): ActionResult {
   const label = listActions(ctx).find((a) => a.id === id)?.label ?? id;
   running = { id, label };
-  ctl.set(Slot.STOP, 0);
+  // STOP is not cleared here: a stop that arrived while this request was still queued must still count
   ctl.set(Slot.RUNNING, 1);
   pushState(true);
   try {
