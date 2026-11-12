@@ -1,14 +1,13 @@
 {
-  "name": "jevpokemon",
+  "name": "jev-voice-pokemon",
   "version": "1.0.0",
-  "description": "Jev (TypeSafe AI decision model) plays Pokémon Red. Bring your own ROM.",
+  "description": "Voice, text, controls or AI agents play Pokémon Red, with Jev working out which on-screen action a command means. Fork of christianmat/jev-pokemon. Bring your own ROM.",
   "scripts": {
     "gen": "tsx scripts/gen-data.ts",
     "setup": "bash scripts/setup.sh",
     "start": "tsx src/server/main.ts",
-    "headless": "tsx src/server/main.ts --headless",
-    "resume": "tsx src/server/main.ts --resume",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "test": "vitest run"
   },
   "keywords": [],
   "author": "Christian Mathiesen",
@@ -22,7 +21,8 @@
     "@types/node": "^26.6.2",
     "@types/ws": "^8.18.1",
     "tsx": "^4.23.15",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
   },
   "type": "module",
   "private": true
