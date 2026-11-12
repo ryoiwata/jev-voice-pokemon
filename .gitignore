@@ -10,3 +10,5 @@ vendor/
 # derived from the pret/pokered disassembly at setup time (not redistributed)
 src/data/generated.json
 .vercel
+.superpowers/
+web/dist/
