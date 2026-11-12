@@ -81,3 +81,31 @@ act(/^Enter Pallet Town/);                                     // the rival chal
 through('the rival battle menu', () => gs.inBattle === 2 && !!gs.screen().cursor && !!findLabel(ctx, 'FIGHT'), () => null, 6000);
 emu.wait(20);
 save('fx-battle');
+
+// ---- stage C: win the rival battle with the first move, then walk into Route 1's grass until something appears
+import { isBattleMenu } from '../src/actions/battle.js';
+until('the rival battle to end', () => !gs.inBattle && free(), () => {
+  const acts = listActions(ctx);
+  if (isBattleMenu(ctx)) runAction(ctx, acts.find((a) => a.kind === 'move')!.id);
+  else if (acts.some((a) => a.id === 'text:next')) runAction(ctx, 'text:next');
+  else emu.wait(10);
+}, 20000);
+console.log(`  rival battle over: ${gs.party()[0].species} hp ${gs.party()[0].hp}/${gs.party()[0].maxHp}`);
+act(/^Enter Pallet Town/);
+act(/^Go north to Route 1/);
+import { buildGrid } from '../src/game/world.js';
+/** Walk to the nearest reachable tall grass, then pace about in it. */
+function intoGrass() {
+  const g = buildGrid(emu, rom, gs);
+  const spots: { x: number; y: number; d: number }[] = [];
+  for (let y = 0; y < g.h; y++) for (let x = 0; x < g.w; x++) if (g.grass(x, y)) spots.push({ x, y, d: Math.abs(x - gs.x) + Math.abs(y - gs.y) });
+  spots.sort((a, b) => a.d - b.d);
+  for (const sp of spots.slice(0, 12)) if (sp.d > 0 && runAction(ctx, `tile:${sp.x},${sp.y}`).status !== 'failed') return;
+  throw new Error('make-fixtures: no reachable grass');
+}
+until('a wild Pokémon', () => gs.inBattle === 1 && isBattleMenu(ctx), () => {
+  if (gs.inBattle || detectMode(ctx) !== 'overworld') { if (listActions(ctx).some((a) => a.id === 'text:next')) runAction(ctx, 'text:next'); else emu.wait(10); return; }
+  intoGrass();
+}, 4000);
+emu.wait(20);
+save('fx-wild');

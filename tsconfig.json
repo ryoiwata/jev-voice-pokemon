@@ -16,8 +16,5 @@
     "src",
     "scripts",
     "tests"
-  ],
-  "exclude": [
-    "src/agent"
   ]
 }
