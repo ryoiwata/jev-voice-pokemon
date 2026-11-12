@@ -8,6 +8,7 @@ import { GameClient } from './game.js';
 import { parseClientMsg, TAG_FRAME, TAG_AUDIO, type LogEntry, type ServerMsg } from './wire.js';
 import { Session } from './session.js';
 import { Answerer } from '../answer/answerer.js';
+import { handleMcp } from './mcp.js';
 import { Interpreter } from '../interpret/interpreter.js';
 import { Jev } from '../jev/client.js';
 import { StandinJev } from '../jev/standin.js';
@@ -41,6 +42,10 @@ export async function startServer(opts: ServerOpts): Promise<{ game: GameClient;
 
   const server = http.createServer((req, res) => {
     const url = (req.url ?? '/').split('?')[0];
+    if (url === '/mcp') {
+      handleMcp(req, res, { session, game }).catch((e) => { console.error(`[mcp] ${(e as Error).message}`); if (!res.headersSent) res.writeHead(500); res.end(); });
+      return;
+    }
     const file = path.join(WEB, path.normalize(url === '/' ? 'index.html' : url));
     if (!file.startsWith(WEB) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
       res.writeHead(404, { 'content-type': 'text/plain' });

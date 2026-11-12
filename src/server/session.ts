@@ -134,6 +134,37 @@ export class Session extends EventEmitter {
     return this.exec(a ?? { id, label: id }, source, arg, undefined);
   }
 
+  /** Tap buttons one after another (an agent's raw input). */
+  async press(buttons: Button[], source: Source): Promise<Outcome> {
+    if (!this.mayAct(source)) return REFUSED;
+    this.pending = null;
+    let r: Outcome = { status: 'nothing', message: '' };
+    for (const b of buttons) {
+      r = await this.exec({ id: `press:${b}`, label: `Press ${b}` }, source, undefined, undefined);
+      if (r.status !== 'done') break;
+    }
+    return r;
+  }
+
+  /** Named save and load. Loading replaces the game in progress, so it needs the controls. */
+  async saveState(name: string, source: Source): Promise<Outcome> {
+    if (!this.mayAct(source)) return REFUSED;
+    await this.deps.game.save(name);
+    this.log(source, 'info', `Saved "${name}".`);
+    return { status: 'done', message: `Saved "${name}".` };
+  }
+  async loadState(name: string, source: Source): Promise<Outcome> {
+    if (!this.mayAct(source)) return REFUSED;
+    try { await this.deps.game.load(name); } catch (e) { return { status: 'failed', message: (e as Error).message }; }
+    this.log(source, 'info', `Loaded "${name}".`);
+    return { status: 'done', message: `Loaded "${name}".` };
+  }
+
+  /** A question for the answerer. Never touches the game, so anyone may ask in any mode. */
+  ask(text: string): Promise<string> {
+    return this.deps.answerer.answer(text, this.deps.game.state);
+  }
+
   /** A click on the game screen: walk there, or interact with what is there. */
   async click(col: number, row: number): Promise<Outcome> {
     const id = await this.deps.game.tileAction(col, row);
