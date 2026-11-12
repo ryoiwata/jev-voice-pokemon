@@ -3,7 +3,7 @@ import type { JevBackend, JevRequest, JevResult, JevAnswer } from './types.js';
 /**
  * A local stand-in for Jev: free, instant, no key. It matches the words the player said against the
  * labels of the options. It handles commands that name the thing ("walk to the poke ball", "use ember")
- * and nothing cleverer. The real Jev replaces it 1:1 with JEV_MODE=gateway.
+ * and nothing cleverer. The real Jev replaces it 1:1 once TYPESAFE_API_KEY is set.
  */
 
 const DROP = new Set(['the', 'a', 'an', 'to', 'with', 'my', 'please', 'at', 'on', 'of', 'in', 'and', 'this', 'that', 'away', 'up', 'now', 'can', 'you', 'i', 'want']);

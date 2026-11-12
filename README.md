@@ -21,13 +21,13 @@ What this fork changes: the self-playing loop, objectives and strategy are gone.
 
 ## Status
 
-Built and tested against the local stand-in for Jev (see below). Three checks need the real Jev and have not been run yet:
+Built and tested against the local stand-in for Jev (see below); the real Jev has not been called yet. Three checks need the real Jev and have not been run yet:
 
 - declining a far-away request such as "go to Cerulean City" in every phrasing,
 - asking "did you mean…?" on a vague command such as "talk to him",
 - a full voice-only run from the title screen through the first rival battle.
 
-After setting `JEV_MODE=gateway`, tune `ACT_MIN_P` and `ACT_MIN_MARGIN` using `logs/jev-calls.jsonl`, which records every command, the options offered and Jev's probabilities.
+After adding `TYPESAFE_API_KEY` to `.env`, tune `ACT_MIN_P` and `ACT_MIN_MARGIN` using `logs/jev-calls.jsonl`, which records every command, the options offered and Jev's probabilities.
 
 ## Setup
 
@@ -96,8 +96,9 @@ Adding Pokémon and move names to Wispr Flow's dictionary improves how they are 
 
 | `.env` | What it does |
 |---|---|
-| `JEV_MODE` | `mock` (default): a free local word-matcher. `gateway`: the real Jev through Vercel AI Gateway. |
-| `AI_GATEWAY_API_KEY` | Needed for `gateway`. Jev is in early access. |
+| `JEV_MODE` | `gateway` (default): the real Jev. `mock`: a free local word-matcher. |
+| `TYPESAFE_API_KEY` | Your TypeSafe key, for the real Jev (early access). With no key, the word-matcher is used whatever the mode. |
+| `JEV_MODEL` | `jev-latest` (default), `jev-preview`, or a pinned release such as `jev-1.14.0`. |
 | `ACT_MIN_P`, `ACT_MIN_MARGIN` | How sure Jev must be, and how far ahead of the runner-up, to act without asking (0.6 and 0.2). |
 | `COSTLY_MIN_P`, `COSTLY_MIN_MARGIN` | The same for hard-to-undo actions (0.85 and 0.4). |
 | `ANTHROPIC_API_KEY` | Turns on question answering. Without it everything else still works. |

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { JevBackend, JevQuestion, JevInput, JevAnswer } from './types.js';
 import { StandinJev } from './standin.js';
-import { GatewayJev } from './gateway.js';
+import { GatewayJev, typesafeKey } from './gateway.js';
 
 export interface JevCallRecord {
   n: number; at: number; purpose: string; latencyMs: number; backend: string;
@@ -26,8 +26,10 @@ export class Jev {
   private log: fs.WriteStream | null = null;
 
   constructor(opts: { mode?: string; backend?: JevBackend; minIntervalMs?: number; maxPerMinute?: number; retries?: number; logFile?: string | null } = {}) {
-    const mode = opts.mode ?? process.env.JEV_MODE ?? 'mock';
-    this.backend = opts.backend ?? (mode === 'gateway' ? new GatewayJev() : new StandinJev());
+    // The real Jev is the default. Without a TypeSafe key (or with JEV_MODE=mock) the local stand-in is used,
+    // so the app works either way.
+    const mode = opts.mode ?? process.env.JEV_MODE ?? 'gateway';
+    this.backend = opts.backend ?? (mode === 'gateway' && typesafeKey() ? new GatewayJev() : new StandinJev());
     this.minIntervalMs = opts.minIntervalMs ?? +(process.env.JEV_MIN_INTERVAL_MS ?? 0);
     this.maxPerMinute = opts.maxPerMinute ?? +(process.env.JEV_MAX_PER_MIN ?? 90);
     this.retries = opts.retries ?? 1;

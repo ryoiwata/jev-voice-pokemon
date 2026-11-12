@@ -8,8 +8,6 @@ if (fs.existsSync('.env')) {
   }
 }
 
-// Accept the Vercel-prefixed name too (AI SDK reads AI_GATEWAY_API_KEY).
-if (!process.env.AI_GATEWAY_API_KEY && process.env.VERCEL_AI_GATEWAY_API_KEY) process.env.AI_GATEWAY_API_KEY = process.env.VERCEL_AI_GATEWAY_API_KEY;
 
 // YouTube: just paste the stream key; the RTMP URL is derived.
 if (!process.env.STREAM_URL && process.env.YOUTUBE_STREAM_KEY) process.env.STREAM_URL = `rtmp://a.rtmp.youtube.com/live2/${process.env.YOUTUBE_STREAM_KEY}`;
