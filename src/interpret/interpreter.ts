@@ -10,7 +10,7 @@ export type Interpretation =
   | { kind: 'question' }
   | { kind: 'impossible' }
   | { kind: 'clarify'; options: Action[] }
-  | { kind: 'nothing'; reason: 'empty' | 'busy' };
+  | { kind: 'nothing'; reason: 'empty' | 'busy' | 'long' };
 export type Interpreted = Interpretation & { backend: string; fellBack: boolean };
 
 const env = (name: string, d: number) => { const v = Number(process.env[name]); return Number.isFinite(v) && process.env[name] !== undefined && process.env[name] !== '' ? v : d; };
@@ -40,10 +40,12 @@ export class Interpreter {
   }
 
   /** `strict` holds every option to the costly thresholds (used for an automatic follow-up). */
-  async interpret(said: string, actions: Action[], state: GameSnapshot, opts: { strict?: boolean } = {}): Promise<Interpreted> {
+  async interpret(said: string, actions: Action[], state: GameSnapshot, opts: { strict?: boolean; justDid?: string } = {}): Promise<Interpreted> {
     const backend = this.jev.backend.name;
-    const text = said.trim().slice(0, MAX_SAID);
+    const text = said.trim();
     if (!text) return { kind: 'nothing', reason: 'empty', backend, fellBack: false };
+    // a paragraph is not a command; acting on its first words would be a guess
+    if (text.length > MAX_SAID) return { kind: 'nothing', reason: 'long', backend, fellBack: false };
     let cands = actions.filter(guessable);
     if (!cands.length) return { kind: 'nothing', reason: 'busy', backend, fellBack: false };
     if (cands.length > MAX_CANDIDATES) cands = [...cands].sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0)).slice(0, MAX_CANDIDATES);
@@ -53,7 +55,8 @@ export class Interpreter {
     criteria.__question = 'The player is asking a question, not giving a command';
     criteria.__impossible = 'The player wants something that none of the other options does';
     const questions: Record<string, JevQuestion> = { intent: { type: 'choice', instructions: INSTRUCTIONS, criteria } };
-    const jevState = { said: text, situation: state.mode, place: state.map, onScreenText: state.dialog, party: state.party.map((p) => p.nickname) };
+    // justDid: the part of this same sentence that has already been carried out ("Use POTION" in "use potion on pikachu")
+    const jevState = { said: text, ...(opts.justDid ? { justDid: opts.justDid } : {}), situation: state.mode, place: state.map, onScreenText: state.dialog, party: state.party.flatMap((p) => (p.nickname === p.species ? [p.nickname] : [p.nickname, p.species])) };
 
     let answer: JevAnswer | undefined, used = backend, fellBack = false;
     try {
@@ -72,7 +75,13 @@ export class Interpreter {
 
   private decide(answer: JevAnswer | undefined, cands: Action[], strict: boolean): Interpretation {
     if (!answer || answer.type !== 'choice') return { kind: 'impossible' };
-    const probs = answer.probabilities ?? { [answer.choice]: 1 };
+    if (!answer.probabilities) {
+      // no measure of how sure the model is: never act unasked on that
+      const only = new Map(cands.map((a) => [a.id, a])).get(answer.choice);
+      if (answer.choice === '__question') return { kind: 'question' };
+      return only ? { kind: 'clarify', options: [only] } : { kind: 'impossible' };
+    }
+    const probs = answer.probabilities;
     const ranked = Object.entries(probs).sort((a, b) => b[1] - a[1]);
     const [top, p] = ranked[0] ?? [answer.choice, 1];
     const p2 = ranked[1]?.[1] ?? 0;

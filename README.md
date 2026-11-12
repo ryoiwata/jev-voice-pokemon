@@ -70,11 +70,13 @@ In every mode: `Esc` or the Stop button halts whatever is running, the on-screen
 
 - **Things on screen, by name:** "talk to the nurse", "enter the Poké Mart", "read the sign", "pick up the item ball", "use the PC", "go north to Route 1".
 - **In battle:** "use Ember", "throw Poké Ball", "switch to Pidgey", "use Potion", "run".
-- **In menus:** say the option: "yes", "no", "item", "save". "Go back" closes a menu.
+- **In menus:** say the option: "yes", "no", "item", "Pokémon". "Go back" closes a menu. (The word "save" on its own is the app's quick save; to use the game's own SAVE, open the menu and click it, or press A on it.)
 - **Always, with no AI involved:** "stop", "next", "left three", "press A", "start", "save", "load", "name him Sparky" (on a naming screen).
 - **Questions:** anything phrased as a question goes to Claude with your current party, bag and location.
 
-Plain dialogue continues by itself at a readable pace and stops whenever the game asks you to choose. You can turn that off or change the pace in Settings.
+Plain dialogue continues by itself at a readable pace and stops whenever the game asks you to choose. Full-screen pages (a Pokémon's stats, a Pokédex entry, the map) stay up until you say "next". You can turn auto-continue off or change the pace in Settings.
+
+"Stop" is heard however it comes out: "stop", "stop it", "please stop", "wait, stop". Saying it, a newer command, or any button press also cancels a command that is still being worked out.
 
 If the app is unsure which thing you meant, it shows up to three numbered guesses; say "one", "two" or "three", or click one. Hard-to-undo actions (tossing an item, releasing a Pokémon, a Master Ball, overwriting a move) need a closer match before they run unasked.
 
@@ -128,7 +130,7 @@ claude mcp add --transport http pokemon http://127.0.0.1:8787/mcp
 | `stop` | Stop whatever is running |
 | `save_state`, `load_state` | Named saves |
 
-An agent can always read. It can act only while you have the page in **Agent** mode, and anything you do there (a click, a button, "stop") takes the controls back.
+An agent can always read. It can act only while you have the page in **Agent** mode, and anything you do there (a click, a button, "stop") takes the controls back: an agent is refused while something you started is running or while you hold a button.
 
 ## How it works
 
@@ -145,7 +147,7 @@ An agent can always read. It can act only while you have the page in **Agent** m
 - The emulator runs in its own thread in real time. Stop and held buttons reach it through shared memory, so they work in the middle of a walk.
 - The **action list** is rebuilt from game memory whenever the situation changes. Hidden items are never listed: a player can't see them either.
 - The app only presses buttons. It never writes game memory.
-- The server listens on `127.0.0.1` only, and keys stay on the server.
+- The server listens on `127.0.0.1` only, refuses connections from other websites or host names (set `DEV_ORIGIN` if you run the page with `npm run dev`), and keeps keys on the server.
 
 | Path | What |
 |---|---|

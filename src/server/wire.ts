@@ -36,6 +36,9 @@ export type ClientMsg =
   | { type: 'click'; col: number; row: number }
   | { type: 'set'; key: SetKey; value: unknown };
 
+/** Longest text the page may send as one command. */
+export const MAX_TEXT = 2000;
+
 /** Names for saves: letters, digits, dash and underscore only, so a name can never leave the saves folder. */
 export const SAVE_NAME = /^[a-z0-9_-]{1,40}$/i;
 
@@ -52,7 +55,7 @@ export function parseClientMsg(raw: string): ClientMsg | null {
     case 'stop': return { type: 'stop' };
     case 'save': case 'load':
       return typeof m.name === 'string' && SAVE_NAME.test(m.name) ? { type: m.type, name: m.name } : null;
-    case 'text': return typeof m.text === 'string' ? { type: 'text', text: m.text } : null;
+    case 'text': return typeof m.text === 'string' && m.text.length <= MAX_TEXT ? { type: 'text', text: m.text } : null;
     case 'choose': return typeof m.logId === 'string' && int(m.index, 0, 9) ? { type: 'choose', logId: m.logId, index: m.index } : null;
     case 'click': return int(m.col, 0, 9) && int(m.row, 0, 8) ? { type: 'click', col: m.col, row: m.row } : null;
     case 'set':

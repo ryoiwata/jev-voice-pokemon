@@ -3,8 +3,12 @@ import { detectMode } from '../game/mode.js';
 import { advanceText, confirmA, cursorTo, cursorToIndex, isNamingScreen, readMenuOptions, tap, typeName, type Label } from './nav.js';
 
 /** Text on screen that means the choice in front of the player is hard to undo. */
-const COSTLY_SCREEN = /forget|toss|release|Would you like to SAVE|overwritten/i;
-const COSTLY_LABEL = /^(TOSS|RELEASE)$/;
+// Wording checked against the game's own text (pret/pokered data/text): "Which move should be forgotten?",
+// "Delete an older move to make room…", "The older file will be erased to save.", "Is it OK to toss…", "Once released…".
+const COSTLY_SCREEN = /forg[eo]t|delete an older|toss|release|erased|Would you like to SAVE|overwrit/i;
+const COSTLY_LABEL = /^(TOSS|RELEASE|MASTER BALL)$/;
+export const isCostlyScreen = (text: string) => COSTLY_SCREEN.test(text);
+export const isCostlyOption = (label: string) => COSTLY_LABEL.test(label);
 
 const screenText = (ctx: Ctx) => ctx.gs.screen().rows.join(' ').replace(/[┌─┐│└┘▶▷▼]/g, ' ').replace(/\s+/g, ' ');
 

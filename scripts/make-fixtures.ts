@@ -70,6 +70,8 @@ const free = () => { if (detectMode(ctx) !== 'overworld') return false; emu.wait
 
 act(/^Enter Reds House 1F/);
 act(/^Enter Pallet Town/);
+emu.wait(30);
+save('fx-pallet');
 act(/^Go north to Route 1/);                                   // Oak stops the player and leads the way
 through("Oak's lab", () => gs.mapName === 'OAKS_LAB' && free());
 emu.wait(30);

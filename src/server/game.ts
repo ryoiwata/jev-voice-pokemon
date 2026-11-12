@@ -29,7 +29,8 @@ export class GameClient extends EventEmitter {
         workerData: { sab: g.ctl.sab, romPath: opts.romPath, resume: opts.resume, autosave: opts.autosave ?? true },
         execArgv: ['--import', 'tsx'],
       });
-      g.worker.on('error', reject);
+      g.worker.on('error', (e: unknown) => { reject(e); g.died(e instanceof Error ? e.message : String(e)); });
+      g.worker.on('exit', () => { if (!g.closing) g.died('its thread exited'); });
       g.worker.on('message', (m: any) => {
         switch (m.type) {
           case 'ready': resolve(g); break;
@@ -47,7 +48,21 @@ export class GameClient extends EventEmitter {
     });
   }
 
+  private closing = false;
+  private dead: string | null = null;
+  /** The game thread is gone: fail everything that is waiting on it and say so, instead of hanging forever. */
+  private died(why: string) {
+    if (this.dead) return;
+    this.dead = why;
+    const err = new Error(`The game stopped unexpectedly (${why}). Restart the app.`);
+    for (const p of this.pending.values()) p.reject(err);
+    this.pending.clear();
+    this.current = null;
+    this.emit('crashed', err.message);
+  }
+
   private call<T>(op: string, args: unknown = {}): Promise<T> {
+    if (this.dead) return Promise.reject(new Error(`The game stopped unexpectedly (${this.dead}). Restart the app.`));
     const id = this.nextId++;
     return new Promise<T>((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
@@ -83,6 +98,8 @@ export class GameClient extends EventEmitter {
   async screenPng(): Promise<Buffer> { return Buffer.from(await this.call<Uint8Array>('screenPng')); }
 
   async shutdown(): Promise<void> {
+    this.closing = true;
+    if (this.dead) return;
     this.stop();
     const exited = new Promise((r) => this.worker.once('exit', r));
     this.worker.postMessage({ id: this.nextId++, op: 'shutdown', args: {} });

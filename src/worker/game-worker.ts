@@ -29,7 +29,10 @@ function save(name: string) {
   fs.mkdirSync(path.dirname(statePath(name)), { recursive: true });
   emu.saveState(statePath(name));
 }
-if (resume && fs.existsSync(statePath(resume))) emu.loadState(statePath(resume));
+if (resume && fs.existsSync(statePath(resume))) {
+  try { emu.loadState(statePath(resume)); }
+  catch (e) { ctx.log('error', `Could not load the save "${resume}" (${(e as Error).message}). Starting from power-on instead.`); }
+}
 emu.attachControl(ctl);
 
 // ---- audio: collect sample pairs into chunks (only at normal speed; anything else would be the wrong pitch)
@@ -88,7 +91,7 @@ emu.onFrame = (screen) => {
 let lastActionsKey = '';
 function pushActions() {
   const actions = listActions(ctx);
-  const key = JSON.stringify(actions.map((a) => a.id));
+  const key = JSON.stringify(actions.map((a) => [a.id, a.label, a.costly ?? false]));
   if (key === lastActionsKey) return;
   lastActionsKey = key;
   port.postMessage({ type: 'actions', actions });
@@ -151,10 +154,15 @@ async function loop() {
   pushState(true);
   port.postMessage({ type: 'ready' });
   while (alive) {
-    for (let i = 0; i < 4; i++) emu.frame();
-    autoAdvance();
-    if (tick++ % 6 === 0) pushActions();
-    if (autosave && Date.now() - lastAutosave > 5 * 60_000) { save('autosave'); lastAutosave = Date.now(); }
+    try {
+      for (let i = 0; i < 4; i++) emu.frame();
+      autoAdvance();
+      if (tick++ % 6 === 0) pushActions();
+      if (autosave && Date.now() - lastAutosave > 5 * 60_000) { lastAutosave = Date.now(); save('autosave'); }
+    } catch (e) {
+      // one bad frame of bookkeeping (a full disk, an odd screen) must not take the game down
+      if (!(e instanceof StopError)) ctx.log('error', String((e as Error).stack ?? e));
+    }
     await new Promise((r) => setImmediate(r));
   }
   process.exit(0);

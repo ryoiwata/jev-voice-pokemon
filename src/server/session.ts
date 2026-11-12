@@ -29,6 +29,8 @@ export type Outcome = ActionResult | { status: 'answer' | 'asking' | 'refused' |
 
 const REFUSED: Outcome = { status: 'refused', message: 'The player has the controls.' };
 const AGENT_MODE_ONLY: Outcome = { status: 'refused', message: 'Agent mode: say "stop" or "voice mode" to take over.' };
+const BUSY: Outcome = { status: 'refused', message: 'The player is doing something. Wait for it to finish.' };
+const CANCELLED: Outcome = { status: 'stopped', message: 'Cancelled.' };
 const QUICK_SAVE = 'quick';
 
 /**
@@ -69,9 +71,21 @@ export class Session extends EventEmitter {
 
   // ---- who may act
 
-  private mayAct(source: Source): boolean {
-    return source === 'human' || this.mode === 'agent';
+  /** Why this source may not act right now, or null if it may. The player always may. */
+  private refusal(source: Source): Outcome | null {
+    if (source === 'human') return null;
+    if (this.mode !== 'agent') return REFUSED;
+    // even in agent mode the player comes first: an agent never replaces what the player started or is holding
+    if (this.current?.source === 'human' || this.deps.game.ctl.get(Slot.HELD) !== 0) return BUSY;
+    return null;
   }
+  private mayAct(source: Source): boolean { return this.refusal(source) === null; }
+
+  /**
+   * Counts commands. Anything that should supersede a command still being worked out (stop, a newer
+   * command, a button press, a mode change) bumps it; the older command sees the change and gives up.
+   */
+  private gen = 0;
 
   /** A human doing anything takes the controls back from an agent's running action. */
   private takeOver(source: Source) {
@@ -79,6 +93,7 @@ export class Session extends EventEmitter {
   }
 
   stop(_source: Source): void {
+    this.gen++;
     this.deps.game.stop();
   }
 
@@ -86,6 +101,7 @@ export class Session extends EventEmitter {
     const { ctl } = this.deps.game;
     if (key === 'mode') {
       if (this.mode === value) return;
+      this.gen++;
       this.mode = value as InputMode;
       // leaving agent mode takes the controls back straight away
       if (this.mode !== 'agent' && this.current?.source === 'agent') { this.current.takenOver = true; this.deps.game.stop(); }
@@ -99,6 +115,8 @@ export class Session extends EventEmitter {
   rawButton(kind: 'down' | 'up' | 'tap', button: Button): void {
     const { game } = this.deps;
     if (kind === 'up') { game.ctl.release(button); return; }
+    this.gen++;
+    this.pending = null; // the screen is about to change under any open "did you mean"
     if (game.busy) { this.takeOver('human'); game.stop(); }
     game.ctl.press(button);
     if (kind === 'tap') setTimeout(() => game.ctl.release(button), 100);
@@ -128,7 +146,9 @@ export class Session extends EventEmitter {
 
   /** Run a listed action by id (an agent's do_action, or anything already resolved). */
   async runAction(id: string, source: Source, arg?: unknown): Promise<Outcome> {
-    if (!this.mayAct(source)) return REFUSED;
+    const no = this.refusal(source);
+    if (no) return no;
+    this.gen++;
     this.pending = null;
     const a = this.deps.game.actions.find((x) => x.id === id);
     return this.exec(a ?? { id, label: id }, source, arg, undefined);
@@ -136,7 +156,9 @@ export class Session extends EventEmitter {
 
   /** Tap buttons one after another (an agent's raw input). */
   async press(buttons: Button[], source: Source): Promise<Outcome> {
-    if (!this.mayAct(source)) return REFUSED;
+    const no = this.refusal(source);
+    if (no) return no;
+    this.gen++;
     this.pending = null;
     let r: Outcome = { status: 'nothing', message: '' };
     for (const b of buttons) {
@@ -148,13 +170,16 @@ export class Session extends EventEmitter {
 
   /** Named save and load. Loading replaces the game in progress, so it needs the controls. */
   async saveState(name: string, source: Source): Promise<Outcome> {
-    if (!this.mayAct(source)) return REFUSED;
+    const no = this.refusal(source);
+    if (no) return no;
     await this.deps.game.save(name);
     this.log(source, 'info', `Saved "${name}".`);
     return { status: 'done', message: `Saved "${name}".` };
   }
   async loadState(name: string, source: Source): Promise<Outcome> {
-    if (!this.mayAct(source)) return REFUSED;
+    const no = this.refusal(source);
+    if (no) return no;
+    this.gen++;
     try { await this.deps.game.load(name); } catch (e) { return { status: 'failed', message: (e as Error).message }; }
     this.log(source, 'info', `Loaded "${name}".`);
     return { status: 'done', message: `Loaded "${name}".` };
@@ -167,7 +192,13 @@ export class Session extends EventEmitter {
 
   /** A click on the game screen: walk there, or interact with what is there. */
   async click(col: number, row: number): Promise<Outcome> {
-    const id = await this.deps.game.tileAction(col, row);
+    const { game } = this.deps;
+    const g = ++this.gen;
+    // The game thread can only say what a click means between actions, so whatever is running (the
+    // player's own walk, or an agent's action) is stopped first. The click then means what is on screen.
+    if (game.busy) { this.takeOver('human'); game.stop(); }
+    const id = await game.tileAction(col, row);
+    if (g !== this.gen) return CANCELLED;
     if (!id) return { status: 'nothing', message: "Can't walk right now." };
     this.pending = null;
     const a = this.deps.game.actions.find((x) => x.id === id);
@@ -176,7 +207,9 @@ export class Session extends EventEmitter {
 
   /** An answer to a "did you mean" question, by click or key. */
   async choose(logId: string, index: number, source: Source): Promise<Outcome> {
-    if (!this.mayAct(source)) return REFUSED;
+    const no = this.refusal(source);
+    if (no) return no;
+    this.gen++;
     const p = this.pending;
     if (!p || p.logId !== logId || !p.choices[index]) return { status: 'nothing', message: 'That question is no longer open.' };
     this.pending = null;
@@ -188,7 +221,8 @@ export class Session extends EventEmitter {
     const { game, interpreter, answerer } = this.deps;
     const said = text.trim();
     if (!said) return { status: 'nothing', message: '' };
-    if (!this.mayAct(source)) return REFUSED;
+    const no = this.refusal(source);
+    if (no) return no;
 
     const has = (id: string) => game.actions.some((a) => a.id === id);
     const fast = fastPath(said, has, this.pending !== null);
@@ -196,8 +230,12 @@ export class Session extends EventEmitter {
     if (source === 'human' && this.mode === 'agent') {
       // the agent has the controls: the player can only stop it or take them back
       const takesOver = fast && (fast.kind === 'stop' || (fast.kind === 'set' && fast.key === 'mode'));
-      if (!takesOver) return AGENT_MODE_ONLY;
+      if (!takesOver) { this.log(source, 'failed', AGENT_MODE_ONLY.message, said); return AGENT_MODE_ONLY; }
     }
+    // this command now supersedes any older one still being worked out
+    const g = ++this.gen;
+    /** True if a stop, a newer command, a button or a mode change arrived while we were waiting. */
+    const superseded = () => g !== this.gen;
 
     if (fast) {
       switch (fast.kind) {
@@ -233,11 +271,14 @@ export class Session extends EventEmitter {
 
     this.pending = null;
     const first = await interpreter.interpret(said, game.actions, game.state);
+    if (superseded()) { this.log(source, 'stopped', 'Cancelled.', said); return CANCELLED; }
+    const stillNo = this.refusal(source);
+    if (stillNo) return stillNo;
     const note = first.fellBack ? ' (Jev unavailable, used the stand-in)' : '';
     switch (first.kind) {
       case 'nothing': {
         if (first.reason === 'empty') return { status: 'nothing', message: '' };
-        const message = "Can't do that right now.";
+        const message = first.reason === 'long' ? "That's too long to be a command. Say one thing at a time." : "Can't do that right now.";
         this.log(source, 'failed', message, said);
         return { status: 'failed', message };
       }
@@ -267,8 +308,8 @@ export class Session extends EventEmitter {
         if (r.status === 'prompt') {
           // The game asked something. If the same sentence already answers it ("use potion ON PIKACHU"),
           // carry on, but only on a strong match, and only this once.
-          const again = await interpreter.interpret(said, game.actions, game.state, { strict: true });
-          if (again.kind === 'act' && again.action.id !== first.action.id) r = await this.exec(again.action, source, undefined, undefined);
+          const again = await interpreter.interpret(said, game.actions, game.state, { strict: true, justDid: first.action.label });
+          if (!superseded() && !this.refusal(source) && again.kind === 'act' && again.action.id !== first.action.id) r = await this.exec(again.action, source, undefined, undefined);
         }
         return r;
       }

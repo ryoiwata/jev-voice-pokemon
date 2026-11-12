@@ -105,13 +105,13 @@ function candidates(ctx: Ctx): Candidate[] {
     const twin = doors.find((d) => d.target.kind === 'warp' && d.target.dest === dest && adj(d.target.x, d.target.y, w.x, w.y));
     if (twin && twin.path.length <= path.length) continue;
     if (twin) doors.splice(doors.indexOf(twin), 1);
-    doors.push({ action: { id: `warp:${w.x},${w.y}`, kind: 'door', label: `Enter ${pretty(mapName(dest))}`, at: { x: w.x, y: w.y }, distance: path.length }, target: { kind: 'warp', x: w.x, y: w.y, dest }, path });
+    doors.push({ action: { id: `warp:${w.x},${w.y}@${gs.mapId}`, kind: 'door', label: `Enter ${pretty(mapName(dest))}`, at: { x: w.x, y: w.y }, distance: path.length }, target: { kind: 'warp', x: w.x, y: w.y, dest }, path });
   }
   out.push(...doors);
   for (const h of holes) {
     const path = px === h.x && py === h.y ? [] : findPath(g, px, py, (x, y) => x === h.x && y === h.y, { blocked: except(`${h.x},${h.y}`), surf });
     const to = [...rom.maps.values()].find((m) => m.name === h.to);
-    add({ id: `warp:${h.x},${h.y}`, kind: 'door', label: `Drop through the hole to ${pretty(h.to)}`, at: { x: h.x, y: h.y } }, { kind: 'warp', x: h.x, y: h.y, dest: to?.id ?? -1 }, path);
+    add({ id: `warp:${h.x},${h.y}@${gs.mapId}`, kind: 'door', label: `Drop through the hole to ${pretty(h.to)}`, at: { x: h.x, y: h.y } }, { kind: 'warp', x: h.x, y: h.y, dest: to?.id ?? -1 }, path);
   }
 
   // walking off the edge of the map into the next area
@@ -133,13 +133,13 @@ function candidates(ctx: Ctx): Candidate[] {
       : boulder ? 'Go to the boulder'
       : OBJECTS[name] ? `Examine the ${OBJECTS[name]}`
       : `Talk to ${pretty(obj?.trainerClass ?? name)}`;
-    add({ id: `npc:${sp.index}`, kind: 'interact', label, at: { x: sp.x, y: sp.y } }, { kind: 'npc', index: sp.index, x: sp.x, y: sp.y, talk: !boulder }, path);
+    add({ id: `npc:${sp.index}@${gs.mapId}`, kind: 'interact', label, at: { x: sp.x, y: sp.y } }, { kind: 'npc', index: sp.index, x: sp.x, y: sp.y, talk: !boulder }, path);
   }
 
   for (const sg of md?.signs ?? []) {
     const ig = interactGoal(g, sg.x, sg.y);
     const path = ig(px, py) ? [] : findPath(g, px, py, ig, { blocked, maxNodes: 6000 });
-    add({ id: `sign:${sg.x},${sg.y}`, kind: 'interact', label: 'Read the sign', at: { x: sg.x, y: sg.y } }, { kind: 'sign', x: sg.x, y: sg.y }, path);
+    add({ id: `sign:${sg.x},${sg.y}@${gs.mapId}`, kind: 'interact', label: 'Read the sign', at: { x: sg.x, y: sg.y } }, { kind: 'sign', x: sg.x, y: sg.y }, path);
   }
 
   // PCs, switches, statues and the like. Hidden items are left out: a player can't see them either.
@@ -154,7 +154,7 @@ function candidates(ctx: Ctx): Candidate[] {
     const path = standOk(px, py) ? [] : findPath(g, px, py, standOk, { blocked, maxNodes: 6000 });
     const label = HIDDEN_LABEL.find(([re]) => re.test(h.fn))?.[1]
       ?? `Examine the ${h.fn.replace(/^(Print|Display|Open)/, '').replace(/Text$/, '').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase()}`;
-    add({ id: `hidden:${h.x},${h.y}`, kind: 'interact', label, at: { x: h.x, y: h.y } }, { kind: 'hidden', x: h.x, y: h.y }, path);
+    add({ id: `hidden:${h.x},${h.y}@${gs.mapId}`, kind: 'interact', label, at: { x: h.x, y: h.y } }, { kind: 'hidden', x: h.x, y: h.y }, path);
   }
 
   // field moves the party actually knows
@@ -163,7 +163,7 @@ function candidates(ctx: Ctx): Candidate[] {
       if (!g.cuttable(x, y)) continue;
       const goal = (sx: number, sy: number) => adj(sx, sy, x, y);
       const path = goal(px, py) ? [] : findPath(g, px, py, goal, { blocked, maxNodes: 4000 });
-      add({ id: `cut:${x},${y}`, kind: 'field', label: 'Cut the tree', at: { x, y } }, { kind: 'cut', x, y }, path);
+      add({ id: `cut:${x},${y}@${gs.mapId}`, kind: 'field', label: 'Cut the tree', at: { x, y } }, { kind: 'cut', x, y }, path);
     }
   }
   if (slotWithMove(ctx, 'SURF') >= 0 && !surf) {
@@ -174,7 +174,7 @@ function candidates(ctx: Ctx): Candidate[] {
       const path = goal(px, py) ? [] : findPath(g, px, py, goal, { blocked, maxNodes: 3000 });
       if (path && (!best || path.length < best.path.length)) best = { x, y, path };
     }
-    if (best) add({ id: `surf:${best.x},${best.y}`, kind: 'field', label: 'Surf on the water', at: { x: best.x, y: best.y } }, { kind: 'surf', x: best.x, y: best.y }, best.path);
+    if (best) add({ id: `surf:${best.x},${best.y}@${gs.mapId}`, kind: 'field', label: 'Surf on the water', at: { x: best.x, y: best.y } }, { kind: 'surf', x: best.x, y: best.y }, best.path);
   }
   if (slotWithMove(ctx, 'STRENGTH') >= 0 && sprites.some((sp) => SPRITES[sp.picture] === 'BOULDER') && !(gs.u8('wStatusFlags1') & 1)) {
     out.push({ action: { id: 'strength', kind: 'field', label: 'Use Strength' }, target: { kind: 'strength' }, path: [] });
@@ -296,11 +296,12 @@ function face(ctx: Ctx, tx: number, ty: number) {
 /** After interacting: wait for the game to respond, then say whether it is now asking or telling something. */
 function afterInteract(ctx: Ctx, done: string): ActionResult {
   const { gs, emu } = ctx;
-  for (let f = 0; f < 90 && !gs.screen().hasTextBox && !gs.screen().cursor && !gs.inBattle; f++) emu.frame();
+  // something showing: a text box, a menu, or a full-screen page (a Pokédex picture) with neither
+  const showing = () => { const s = gs.screen(); return s.hasTextBox || !!s.cursor || detectMode(ctx) === 'dialog'; };
+  for (let f = 0; f < 90 && !showing() && !gs.inBattle; f++) emu.frame();
   emu.wait(10);
   if (gs.inBattle) return { status: 'interrupted', message: `${done} A battle started.` };
-  const s = gs.screen();
-  if (s.hasTextBox || s.cursor) return { status: 'prompt', message: done };
+  if (showing()) return { status: 'prompt', message: done };
   return { status: 'done', message: done };
 }
 
@@ -356,11 +357,21 @@ export function runOverworld(ctx: Ctx, id: string): ActionResult {
       return gs.mapId !== map0 ? { status: 'done', message: `Now in ${pretty(gs.mapName)}.` } : { status: 'interrupted', message: 'Something is in the way.' };
     }
     case 'npc': {
-      const sp = gs.sprites().find((s) => s.index === t.index);
-      face(ctx, sp?.x ?? t.x, sp?.y ?? t.y);
+      // People wander. Make sure we are still next to them before pressing A; if they moved, go to them once more.
+      const where = () => gs.sprites().find((s) => s.index === t.index && !s.hidden);
+      const beside = () => { const sp = where(); return !!sp && interactGoal(buildGrid(emu, ctx.rom, gs), sp.x, sp.y)(gs.x, gs.y); };
+      for (let tries = 0; tries < 2 && !beside(); tries++) {
+        const again = find();
+        if (!again || walk(ctx, again.path) !== 'ok') break;
+      }
+      const sp = where();
+      if (!sp || !beside()) return { status: 'interrupted', message: `${c.action.label}: they moved away.` };
+      face(ctx, sp.x, sp.y);
       if (!t.talk) return { status: 'done', message: `${c.action.label}: there.` };
       tap(ctx, 'A', 20);
-      return afterInteract(ctx, `${c.action.label}.`);
+      const r = afterInteract(ctx, `${c.action.label}.`);
+      // a talk that put nothing on screen did not happen (they stepped away as we pressed A)
+      return r.status === 'done' ? { status: 'interrupted', message: `${c.action.label}: nothing happened. They may have moved.` } : r;
     }
     case 'sign': case 'hidden': {
       face(ctx, t.x, t.y);

@@ -33,18 +33,31 @@ function near(a: string, b: string): boolean {
   return edits + (a.length - i) + (b.length - j) <= 1;
 }
 
-/** How much of an option's label the player's words cover, 0 to 1. */
-export function score(said: string[], label: string): number {
+/** "don't throw the master ball" must never throw it: a negated sentence is not a command the stand-in can read. */
+const NEGATED = /\b(not|no|never|nope|dont|don't|do not|doesnt|won't|wont|shouldn't|shouldnt|cant|can't)\b/i;
+
+/**
+ * How well an option fits what was said, 0 to 1. Two things must both hold: the words cover the option's
+ * label, AND the label accounts for the words. Without the second, any sentence that happens to contain
+ * "run" would run. `known` are words that may be left over because they name something else in the game
+ * (a party member in "use potion on pikachu").
+ */
+export function score(said: string[], label: string, known: Set<string> = new Set()): number {
   const saidWhere = said.some((t) => WHERE.has(t));
+  const labelTokens = tokens(label);
   let total = 0, hit = 0, named = false;
-  for (const t of tokens(label)) {
+  for (const t of labelTokens) {
     if (WHERE.has(t) && !saidWhere) continue; // "to the north" on a label only counts when the player gave a direction
     const verb = VERBS.has(t), w = verb ? 0.5 : 1;
     total += w;
     if (said.some((s) => near(s, t))) { hit += w; if (!verb) named = true; }
   }
   // sharing only a verb ("use …") says nothing about which thing was meant
-  return total && named ? hit / total : 0;
+  if (!total || !named) return 0;
+  const content = said.filter((s) => !VERBS.has(s) && !known.has(s));
+  const explained = content.filter((s) => labelTokens.some((t) => near(s, t))).length;
+  const saidCover = content.length ? explained / content.length : 1;
+  return (hit / total) * saidCover * saidCover;
 }
 
 export class StandinJev implements JevBackend {
@@ -53,6 +66,9 @@ export class StandinJev implements JevBackend {
   async evaluate(req: JevRequest): Promise<JevResult> {
     const said = typeof (req.state as any)?.said === 'string' ? String((req.state as any).said) : '';
     const words = tokens(said);
+    const negated = NEGATED.test(said.replace(/[’]/g, "'"));
+    const party: unknown[] = Array.isArray((req.state as any)?.party) ? (req.state as any).party : [];
+    const known = new Set([...party.flatMap((n) => tokens(String(n))), ...tokens(String((req.state as any)?.justDid ?? ''))]);
     const answers: Record<string, JevAnswer> = {};
     for (const [qid, q] of Object.entries(req.questions)) {
       if (q.type === 'boolean') { answers[qid] = { type: 'boolean', probability: 0.5 }; continue; }
@@ -61,7 +77,7 @@ export class StandinJev implements JevBackend {
       for (const [key, label] of Object.entries(q.criteria)) {
         if (key === '__question') raw[key] = QUESTION.test(said.trim().toLowerCase().replace(/[’']/g, '')) ? 1 : 0;
         else if (key === '__impossible') raw[key] = 0.45;
-        else raw[key] = score(words, typeof label === 'string' ? label : key);
+        else raw[key] = negated ? 0 : score(words, typeof label === 'string' ? label : key, known);
       }
       // a sharp curve: a full match should stand well clear of partial ones
       const sum = Object.values(raw).reduce((a, s) => a + s ** 6, 0) || 1;

@@ -24,7 +24,10 @@ export function fastPath(text: string, has: (id: string) => boolean, pending: bo
   if (!t) return null;
   let m: RegExpMatchArray | null;
 
-  if (/^(stop|halt|cancel)$/.test(t)) return { kind: 'stop' };
+  // Stop must be heard however it comes out of dictation: "stop it", "please stop", "stop stop", "wait stop".
+  // Any short utterance with the word in it counts; a long sentence that merely contains it does not.
+  const words = t.replace(/[^a-z' ]/g, ' ').split(' ').filter(Boolean);
+  if (t === 'cancel' || (words.length <= 5 && words.some((w) => w === 'stop' || w === 'halt'))) return { kind: 'stop' };
   if ((m = t.match(/^(voice|text|controls|agent) mode$/))) return { kind: 'set', key: 'mode', value: m[1] as InputMode };
   if ((m = t.match(/^auto[- ]?advance (on|off)$/))) return { kind: 'set', key: 'autoAdvance', value: m[1] === 'on' };
   if (t === 'save') return { kind: 'save' };

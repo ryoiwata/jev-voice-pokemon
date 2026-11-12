@@ -40,14 +40,27 @@ export async function startServer(opts: ServerOpts): Promise<{ game: GameClient;
   const session = new Session({ game, interpreter: new Interpreter(jev, new StandinJev()), answerer, jev: jev.backend.name === 'gateway' ? 'gateway' : 'standin' });
   const recent: LogEntry[] = [];
 
+  // Only this machine's own page may talk to the game. Browsers let any website open a WebSocket to
+  // 127.0.0.1, and DNS rebinding can point another host name here, so both the Host the request was
+  // addressed to and (when a browser sends one) the Origin it came from must be this server.
+  let port = 0;
+  const local = () => [`127.0.0.1:${port}`, `localhost:${port}`];
+  const devOrigin = process.env.DEV_ORIGIN; // e.g. http://localhost:5173 when running the page with `npm run dev`
+  const allowed = (req: http.IncomingMessage): boolean => {
+    if (!local().includes(String(req.headers.host ?? '').toLowerCase())) return false;
+    const origin = req.headers.origin;
+    return origin === undefined || local().some((h) => origin === `http://${h}`) || (!!devOrigin && origin === devOrigin);
+  };
+
   const server = http.createServer((req, res) => {
+    if (!allowed(req)) { res.writeHead(403, { 'content-type': 'text/plain' }); res.end('Forbidden'); return; }
     const url = (req.url ?? '/').split('?')[0];
     if (url === '/mcp') {
       handleMcp(req, res, { session, game }).catch((e) => { console.error(`[mcp] ${(e as Error).message}`); if (!res.headersSent) res.writeHead(500); res.end(); });
       return;
     }
     const file = path.join(WEB, path.normalize(url === '/' ? 'index.html' : url));
-    if (!file.startsWith(WEB) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
+    if (!file.startsWith(WEB + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
       res.writeHead(404, { 'content-type': 'text/plain' });
       res.end(url === '/' ? 'The page has not been built yet. Run: npm run build:web' : 'Not found');
       return;
@@ -64,6 +77,12 @@ export async function startServer(opts: ServerOpts): Promise<{ game: GameClient;
   game.on('frame', (f: Uint8Array) => { if (sockets.size) broadcastBin(tagged(TAG_FRAME, f)); });
   game.on('audio', (s: Int16Array) => { if (sockets.size) broadcastBin(tagged(TAG_AUDIO, new Uint8Array(s.buffer, s.byteOffset, s.byteLength))); });
   game.on('state', (state) => broadcast({ type: 'state', state }));
+  game.on('crashed', (message: string) => {
+    console.error(`[game] ${message}`);
+    const entry: LogEntry = { id: `crash-${Date.now()}`, at: Date.now(), source: 'human', status: 'failed', text: message };
+    recent.push(entry);
+    broadcast({ type: 'log', entry });
+  });
   session.on('session', (info) => broadcast({ type: 'session', ...info }));
   session.on('log', (entry: LogEntry) => {
     const i = recent.findIndex((e) => e.id === entry.id);
@@ -71,7 +90,7 @@ export async function startServer(opts: ServerOpts): Promise<{ game: GameClient;
     broadcast({ type: 'log', entry });
   });
 
-  const wss = new WebSocketServer({ server, path: "/ws" });
+  const wss = new WebSocketServer({ server, path: '/ws', verifyClient: ({ req }, done) => (allowed(req) ? done(true) : done(false, 403, 'Forbidden')) });
   wss.on('connection', (ws) => {
     sockets.add(ws);
     send(ws, { type: 'state', state: game.state });
@@ -100,7 +119,7 @@ export async function startServer(opts: ServerOpts): Promise<{ game: GameClient;
   });
 
   await new Promise<void>((resolve) => server.listen(opts.port, '127.0.0.1', resolve));
-  const port = (server.address() as { port: number }).port;
+  port = (server.address() as { port: number }).port;
   return {
     game, session, url: `http://127.0.0.1:${port}`,
     async close() {

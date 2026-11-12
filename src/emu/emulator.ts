@@ -82,7 +82,10 @@ export class Emulator {
   }
 
   saveState(file: string) {
-    fs.writeFileSync(file, JSON.stringify({ frames: this.frames, state: this.core.saveState() }));
+    // write beside the target and rename, so a crash mid-write can never leave a half-written save
+    const tmp = `${file}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify({ frames: this.frames, state: this.core.saveState() }));
+    fs.renameSync(tmp, file);
   }
 
   loadState(file: string) {

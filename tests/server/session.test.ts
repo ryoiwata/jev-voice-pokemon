@@ -17,7 +17,7 @@ const PARTY_MENU = [A('menu:PIKACHU', 'PIKACHU', { kind: 'menu' }), A('menu:PIDG
 /** A game that records what it was asked to do. `script` decides each action's result. */
 class FakeGame implements GameLike {
   ctl = new Control();
-  state: any = { mode: 'overworld', map: 'VIRIDIAN_CITY', dialog: '', party: [], running: null };
+  state: any = { mode: 'overworld', map: 'VIRIDIAN_CITY', dialog: '', party: [{ nickname: 'PIKACHU', species: 'PIKACHU' }, { nickname: 'PIDGEY', species: 'PIDGEY' }], running: null };
   actions: Action[] = WORLD;
   ran: { id: string; arg?: unknown }[] = [];
   script: (id: string) => ActionResult | Promise<ActionResult> = () => ({ status: 'done', message: 'Done.' });
@@ -219,5 +219,114 @@ describe('Session: who has the controls', () => {
     game.tileAction.mockResolvedValueOnce(null);
     await s.click(1, 1);
     expect(game.ran.length).toBe(1);
+  });
+});
+
+// ---- review findings 4-6: things that happen while something else is still in flight
+import type { JevBackend } from '../../src/jev/types.js';
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** An interpreter whose model takes `ms` to answer, like a real network call. */
+function slowSession(ms: number) {
+  const inner = new StandinJev();
+  const slow: JevBackend = { name: 'slow', evaluate: async (req) => { await sleep(ms); return inner.evaluate(req); } };
+  const g = new FakeGame();
+  const sess = new Session({ game: g, interpreter: new Interpreter(new Jev({ backend: slow, logFile: null }), inner), answerer: { enabled: false, answer: async () => '' }, jev: 'standin' });
+  return { g, sess };
+}
+
+describe('Session: while a command is still being worked out', () => {
+  it('"stop" cancels it: the action never starts', async () => {
+    const { g, sess } = slowSession(120);
+    const p = sess.handleText('walk to the poke ball', 'human');
+    await sleep(30);
+    sess.stop('human');
+    expect((await p).status).toBe('stopped');
+    await sleep(150);
+    expect(g.ran).toEqual([]);
+  });
+
+  it('a newer command replaces it', async () => {
+    const { g, sess } = slowSession(120);
+    const first = sess.handleText('walk to the poke ball', 'human');
+    await sleep(30);
+    await sess.handleText('left three', 'human');
+    expect((await first).status).toBe('stopped');
+    await sleep(150);
+    expect(g.ran.map((x) => x.id)).toEqual(['steps:left']);
+  });
+
+  it('an agent’s command does not run if the player took the controls back meanwhile', async () => {
+    const { g, sess } = slowSession(120);
+    sess.set('mode', 'agent');
+    const p = sess.handleText('walk to the poke ball', 'agent');
+    await sleep(30);
+    sess.set('mode', 'voice');
+    expect((await p).status).not.toBe('done');
+    await sleep(150);
+    expect(g.ran).toEqual([]);
+  });
+
+  it('a button press cancels it too', async () => {
+    const { g, sess } = slowSession(120);
+    const p = sess.handleText('walk to the poke ball', 'human');
+    await sleep(30);
+    sess.rawButton('tap', 'B');
+    expect((await p).status).toBe('stopped');
+    expect(g.ran).toEqual([]);
+  });
+});
+
+describe('Session: the player always wins', () => {
+  it('a click during a running action stops it first, then walks to the clicked spot', async () => {
+    game.script = (id) => (id === 'npc:4' ? never() : { status: 'done', message: 'Walked there.' });
+    // like the real game thread: it cannot say what a click means until the running action has ended
+    game.tileAction.mockImplementation(async () => { while (game.busy) await sleep(5); return 'tile:3,3'; });
+    const walking = s.runAction('npc:4', 'human');
+    await sleep(20);
+    const r = await Promise.race([s.click(3, 3), sleep(1000).then(() => 'hung')]);
+    expect(r).not.toBe('hung');
+    expect((await walking).status).toBe('stopped');
+    expect(game.ran.map((x) => x.id)).toEqual(['npc:4', 'tile:3,3']);
+  });
+
+  it('an agent cannot replace an action the player started', async () => {
+    s.set('mode', 'agent');
+    game.script = (id) => (id === 'npc:2' ? never() : { status: 'done', message: 'Done.' });
+    const mine = s.runAction('npc:2', 'human');
+    await sleep(20);
+    expect(await s.runAction('npc:4', 'agent')).toEqual({ status: 'refused', message: 'The player is doing something. Wait for it to finish.' });
+    expect(await s.press(['A'], 'agent')).toMatchObject({ status: 'refused' });
+    expect(game.ran.map((x) => x.id)).toEqual(['npc:2']);
+    s.stop('human'); await mine;
+    expect((await s.runAction('npc:4', 'agent')).status).toBe('done');
+  });
+
+  it('an agent cannot act while the player is holding a button', async () => {
+    s.set('mode', 'agent');
+    s.rawButton('down', 'LEFT');
+    expect((await s.runAction('npc:4', 'agent')).status).toBe('refused');
+    s.rawButton('up', 'LEFT');
+    expect((await s.runAction('npc:4', 'agent')).status).toBe('done');
+  });
+
+  it('a pending "did you mean" is dropped once the player presses a button', async () => {
+    await s.handleText('talk to the youngster', 'human');
+    s.rawButton('tap', 'B');
+    await s.handleText('two', 'human');
+    expect(game.ran).toEqual([]);
+  });
+
+  it('a paragraph gets one plain line and runs nothing', async () => {
+    const r = await s.handleText('walk to the poke ball '.repeat(20), 'human');
+    expect(r).toEqual({ status: 'failed', message: "That's too long to be a command. Say one thing at a time." });
+    expect(game.ran).toEqual([]);
+    expect(last().status).toBe('failed');
+  });
+
+  it('text in agent mode that is refused is still shown in the log', async () => {
+    s.set('mode', 'agent');
+    await s.handleText('walk to the poke ball', 'human');
+    expect(last()).toMatchObject({ status: 'failed', heard: 'walk to the poke ball' });
   });
 });
