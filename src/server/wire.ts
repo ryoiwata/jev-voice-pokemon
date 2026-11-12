@@ -5,7 +5,7 @@ import type { GameSnapshot } from '../game/snapshot.js';
 /** Binary messages: first byte is the tag. */
 export const TAG_FRAME = 1; // + 160*144*4 bytes RGBA
 export const TAG_AUDIO = 2; // + Int16 LE interleaved stereo
-export const AUDIO_RATE = 44100;
+export const AUDIO_RATE = 44151; // the emulator core's native output rate (4194304 / 95)
 
 export type InputMode = 'voice' | 'text' | 'controls' | 'agent';
 export const INPUT_MODES: InputMode[] = ['voice', 'text', 'controls', 'agent'];

@@ -51,3 +51,9 @@ kbd { font: 12px var(--mono); border: 1px solid currentColor; border-radius: 5px
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { border: 1px solid var(--line); border-radius: 999px; padding: 3px 11px; background: var(--bg); font-size: 14px; }
 @media (max-width: 860px) { .page { grid-template-columns: 1fr; } .gamepad { margin-left: 0; } }
+
+.volume { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
+.panel h2 > span:first-of-type { margin-right: auto; margin-left: 12px; }
+.mute, .sound-on { min-height: 32px; padding: 2px 10px; font-size: 14px; text-transform: none; letter-spacing: 0; }
+.sound-on { margin-left: auto; border-color: var(--low); color: var(--ink); }
+.volume input[type=range] { min-height: 0; padding: 0; width: 110px; accent-color: var(--accent); }

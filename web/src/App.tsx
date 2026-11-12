@@ -4,6 +4,7 @@ import { useConnection } from './ws';
 import { GameCanvas } from './GameCanvas';
 import { Gamepad } from './Gamepad';
 import { PartyPanel, BattlePanel, BagPanel } from './panels';
+import { VolumeControl } from './VolumeControl';
 import { DEFAULT_KEYMAP, buttonFor } from './keys';
 
 const typingInto = (t: EventTarget | null) => t instanceof HTMLElement && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT');
@@ -37,7 +38,7 @@ export function App() {
     <main className="page">
       <div className="col left">
         <section className="panel screen">
-          <h2>Game <span>{conn.connected ? 'click a spot to walk there' : 'connecting…'}</span></h2>
+          <h2>Game <span>{conn.connected ? 'click a spot to walk there' : 'connecting…'}</span><VolumeControl conn={conn} /></h2>
           <GameCanvas conn={conn} onTile={(col, row) => send({ type: 'click', col, row })} />
         </section>
         <section className="panel controls">
