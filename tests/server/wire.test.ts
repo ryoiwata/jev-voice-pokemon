@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseClientMsg, buttonMask, maskButtons } from '../../src/server/wire.js';
+import { parseClientMsg, buttonMask, maskButtons, voiceClip, readVoiceClip, TAG_VOICE } from '../../src/server/wire.js';
 
 describe('parseClientMsg', () => {
   it('accepts a well-formed button message', () => {
@@ -35,5 +35,13 @@ describe('button masks', () => {
     expect(buttonMask(['RIGHT', 'A', 'A'])).toBe(1 | 128);
     expect(maskButtons(1 | 128)).toEqual(['A', 'RIGHT']);
     expect(maskButtons(0)).toEqual([]);
+  });
+});
+
+describe('voice clips', () => {
+  it('round-trips a clip with its answer id', () => {
+    const b = voiceClip(42, Int16Array.of(1, -1, 32767));
+    expect(b[0]).toBe(TAG_VOICE);
+    expect(readVoiceClip(b)).toEqual({ answerId: 42, pcm: Int16Array.of(1, -1, 32767) });
   });
 });

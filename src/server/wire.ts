@@ -5,6 +5,7 @@ import type { GameSnapshot } from '../game/snapshot.js';
 /** Binary messages: first byte is the tag. */
 export const TAG_FRAME = 1; // + 1 byte of buttons held (see buttonMask) + 160*144*4 bytes RGBA
 export const TAG_AUDIO = 2; // + Int16 LE interleaved stereo
+export const TAG_VOICE = 3; // + u32 LE answer id (its log entry's id) + Int16 LE mono at VOICE_RATE
 export const AUDIO_RATE = 44151; // the emulator core's native output rate (4194304 / 95)
 /** Spoken answers: mono 16-bit at this rate. */
 export const VOICE_RATE = 22050;
@@ -33,13 +34,17 @@ export interface LogEntry {
 }
 export type Chooser = 'jev' | 'standin' | 'direct' | 'picked';
 
-export interface SessionInfo { mode: InputMode; autoAdvance: boolean; advancePaceMs: number; speed: number; jev: 'standin' | 'gateway'; answers: boolean }
+export interface SessionInfo { mode: InputMode; autoAdvance: boolean; advancePaceMs: number; speed: number; jev: 'standin' | 'gateway'; answers: boolean;
+  /** the server can speak answers itself (the Mac voice); otherwise the page reads them with the browser's voice */
+  speech: boolean }
 
 export type ServerMsg =
   | { type: 'state'; state: GameSnapshot }
   | ({ type: 'session' } & SessionInfo)
   | { type: 'log'; entry: LogEntry }
-  | { type: 'saves'; names: string[] };
+  | { type: 'saves'; names: string[] }
+  /** stop speaking: the player stopped, or a newer answer replaces the one being spoken */
+  | { type: 'hush' };
 
 export type SetKey = 'mode' | 'autoAdvance' | 'advancePaceMs' | 'speed';
 export type ClientMsg =
@@ -50,6 +55,22 @@ export type ClientMsg =
   | { type: 'choose'; logId: string; index: number }
   | { type: 'click'; col: number; row: number }
   | { type: 'set'; key: SetKey; value: unknown };
+
+/** One spoken sentence as a binary message. */
+export function voiceClip(answerId: number, pcm: Int16Array): Uint8Array {
+  const out = new Uint8Array(5 + pcm.length * 2);
+  const v = new DataView(out.buffer);
+  out[0] = TAG_VOICE;
+  v.setUint32(1, answerId >>> 0, true);
+  for (let i = 0; i < pcm.length; i++) v.setInt16(5 + i * 2, pcm[i], true);
+  return out;
+}
+export function readVoiceClip(bytes: Uint8Array): { answerId: number; pcm: Int16Array } {
+  const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const pcm = new Int16Array((bytes.length - 5) >> 1);
+  for (let i = 0; i < pcm.length; i++) pcm[i] = v.getInt16(5 + i * 2, true);
+  return { answerId: v.getUint32(1, true), pcm };
+}
 
 /** Longest text the page may send as one command. */
 export const MAX_TEXT = 2000;

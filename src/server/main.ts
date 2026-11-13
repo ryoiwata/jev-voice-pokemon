@@ -7,7 +7,8 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { GameClient } from './game.js';
 import { Rom } from '../game/rom.js';
 import { Pics } from '../game/pics.js';
-import { parseClientMsg, TAG_FRAME, TAG_AUDIO, type LogEntry, type ServerMsg } from './wire.js';
+import { parseClientMsg, TAG_FRAME, TAG_AUDIO, voiceClip, type LogEntry, type ServerMsg } from './wire.js';
+import { findSpeaker, MacSpeaker } from '../voice/speaker.js';
 import { Session } from './session.js';
 import { Answerer } from '../answer/answerer.js';
 import { handleMcp } from './mcp.js';
@@ -32,7 +33,7 @@ function tagged(tag: number, bytes: Uint8Array): Buffer {
 
 export interface ServerOpts { port: number; fresh?: boolean; load?: string; autosave?: boolean }
 
-export async function startServer(opts: ServerOpts): Promise<{ game: GameClient; session: Session; url: string; close(): Promise<void> }> {
+export async function startServer(opts: ServerOpts): Promise<{ game: GameClient; session: Session; url: string; voice: string; close(): Promise<void> }> {
   const resume = opts.load ?? (opts.fresh ? undefined : 'autosave');
   const game = await GameClient.start({ romPath: process.env.ROM_PATH ?? 'roms/red.gb', resume, autosave: opts.autosave });
   game.on('log', (kind: string, msg: string) => { if (kind === 'error') console.error(`[game] ${msg}`); });
@@ -40,7 +41,8 @@ export async function startServer(opts: ServerOpts): Promise<{ game: GameClient;
   const pics = new Pics(new Rom(fs.readFileSync(process.env.ROM_PATH ?? 'roms/red.gb')));
   const jev = new Jev({ logFile: opts.autosave === false ? (process.env.JEV_LOG_FILE || null) : undefined });
   const answerer = new Answerer();
-  const session = new Session({ game, interpreter: new Interpreter(jev, new StandinJev()), answerer, jev: jev.backend.name === 'gateway' ? 'gateway' : 'standin' });
+  const speaker = findSpeaker();
+  const session = new Session({ game, interpreter: new Interpreter(jev, new StandinJev()), answerer, jev: jev.backend.name === 'gateway' ? 'gateway' : 'standin', speaker });
   const recent: LogEntry[] = [];
 
   // Only this machine's own page may talk to the game. Browsers let any website open a WebSocket to
@@ -97,6 +99,8 @@ export async function startServer(opts: ServerOpts): Promise<{ game: GameClient;
     broadcast({ type: 'log', entry });
   });
   session.on('session', (info) => broadcast({ type: 'session', ...info }));
+  session.on('voice', (answerId: number, pcm: Int16Array) => { if (sockets.size) broadcastBin(Buffer.from(voiceClip(answerId, pcm))); });
+  session.on('hush', () => broadcast({ type: 'hush' }));
   session.on('log', (entry: LogEntry) => {
     const i = recent.findIndex((e) => e.id === entry.id);
     if (i >= 0) recent[i] = { ...entry }; else { recent.push({ ...entry }); if (recent.length > 100) recent.shift(); }
@@ -135,6 +139,8 @@ export async function startServer(opts: ServerOpts): Promise<{ game: GameClient;
   port = (server.address() as { port: number }).port;
   return {
     game, session, url: `http://127.0.0.1:${port}`,
+    /** what speaks answers: the Mac voice's name, or the browser's voice */
+    voice: speaker instanceof MacSpeaker ? `Mac voice "${speaker.voice}"` : "the browser's voice",
     async close() {
       for (const ws of sockets) ws.terminate();
       await new Promise((r) => server.close(r));
@@ -148,6 +154,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const opt = (n: string) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : undefined; };
   const s = await startServer({ port: +(opt('port') ?? process.env.PORT ?? 8787), fresh: args.includes('--fresh'), load: opt('load') });
   console.log(`Pokémon Red is running: ${s.url}`);
+  console.log(`Answers are spoken with ${s.voice}.`);
   let closing = false;
   for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, async () => { if (closing) return; closing = true; await s.close(); process.exit(0); });
 }

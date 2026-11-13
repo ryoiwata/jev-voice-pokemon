@@ -1,3 +1,5 @@
+import { SentenceCutter } from '../voice/sentences.js';
+import type { SpeakerLike } from '../voice/speaker.js';
 import { EventEmitter } from 'node:events';
 import type { Button } from '../emu/emulator.js';
 import type { Action, ActionResult } from '../actions/types.js';
@@ -75,8 +77,12 @@ export class Session extends EventEmitter {
   static readonly AGENT_HOLD_MS = 5000;
   private agentHoldUntil = 0;
   private now: () => number;
+  /** bumped to silence whatever is being spoken */
+  private voiceGen = 0;
+  /** settles once every sentence queued so far has been spoken or dropped */
+  voiceQueue: Promise<void> = Promise.resolve();
 
-  constructor(private deps: { game: GameLike; interpreter: Interpreter; answerer: AnswererLike; jev: 'standin' | 'gateway'; now?: () => number }) {
+  constructor(private deps: { game: GameLike; interpreter: Interpreter; answerer: AnswererLike; jev: 'standin' | 'gateway'; speaker?: SpeakerLike | null; now?: () => number }) {
     super();
     this.now = deps.now ?? Date.now;
   }
@@ -85,7 +91,7 @@ export class Session extends EventEmitter {
     const { ctl } = this.deps.game;
     return {
       mode: this.mode, autoAdvance: ctl.get(Slot.AUTO_ADVANCE) === 1, advancePaceMs: ctl.get(Slot.ADVANCE_PACE_MS),
-      speed: ctl.get(Slot.SPEED_X100) / 100, jev: this.deps.jev, answers: this.deps.answerer.enabled,
+      speed: ctl.get(Slot.SPEED_X100) / 100, jev: this.deps.jev, answers: this.deps.answerer.enabled, speech: !!this.deps.speaker,
     };
   }
 
@@ -124,6 +130,45 @@ export class Session extends EventEmitter {
   }
   private mayAct(source: Source): boolean { return this.refusal(source) === null; }
 
+  // ---- spoken answers
+
+  /** Silence the voice: sentences not yet spoken are dropped and the pages stop playing. */
+  private hush() {
+    this.voiceGen++;
+    this.emit('hush');
+  }
+
+  /**
+   * Speaks an answer as it streams in, a sentence at a time. Emits 'voice' (answerId, pcm) for each.
+   * Null when there is no speaker. A newer answer or a stop silences it.
+   */
+  private speakAnswer(answerId: number): { push(soFar: string): void; finish(final: string): void } | null {
+    const speaker = this.deps.speaker;
+    if (!speaker) return null;
+    this.hush();
+    let g = this.voiceGen;
+    const cutter = new SentenceCutter();
+    const queue = (sentences: string[]) => {
+      for (const s of sentences) {
+        this.voiceQueue = this.voiceQueue.then(async () => {
+          if (g !== this.voiceGen) return;
+          const pcm = await speaker.speak(s).catch(() => null);
+          if (pcm && pcm.length && g === this.voiceGen) this.emit('voice', answerId, pcm);
+        });
+      }
+    };
+    return {
+      push: (soFar) => queue(cutter.push(soFar)),
+      finish: (final) => {
+        const { sentences, replaced } = cutter.finish(final);
+        if (g !== this.voiceGen) return;
+        // the final answer is not what streamed (a refusal, a failure): say it instead of what was queued
+        if (replaced) { this.hush(); g = this.voiceGen; }
+        queue(sentences);
+      },
+    };
+  }
+
   /** Close an open "did you mean" that will not be answered, so the page stops offering it. */
   private dropPending() {
     const p = this.pending;
@@ -148,7 +193,7 @@ export class Session extends EventEmitter {
 
   stop(source: Source): void {
     this.bumps++;
-    if (source === 'human') this.agentHoldUntil = this.now() + Session.AGENT_HOLD_MS;
+    if (source === 'human') { this.agentHoldUntil = this.now() + Session.AGENT_HOLD_MS; this.hush(); }
     this.gen++;
     this.deps.game.stop();
   }
@@ -382,8 +427,10 @@ export class Session extends EventEmitter {
       }
       case 'question': {
         const entry = this.log(source, 'answer', '…', said);
-        const message = await answerer.answer(said, game.state, (soFar) => this.update(entry, 'answer', soFar));
+        const say = source === 'human' ? this.speakAnswer(Number(entry.id)) : null;
+        const message = await answerer.answer(said, game.state, (soFar) => { this.update(entry, 'answer', soFar); say?.push(soFar); });
         this.update(entry, 'answer', message);
+        say?.finish(message);
         return { status: 'answer', message };
       }
       case 'clarify': {

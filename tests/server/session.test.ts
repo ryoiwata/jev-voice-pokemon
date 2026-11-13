@@ -675,3 +675,86 @@ describe('Session: carrying on until the command is done', () => {
     expect(calls()).toBe(0);
   });
 });
+
+describe('Session: spoken answers', () => {
+  const Q = "what's good against rock types?";
+  let speaker: { speak: import('vitest').Mock<(t: string) => Promise<Int16Array | null>> };
+  let sp: Session, voices: [number, Int16Array][], hushes: number;
+  /** an answerer that streams `parts` (each the whole answer so far) and returns `final` */
+  const streams = (parts: string[], final = parts[parts.length - 1]) => {
+    answerer.answer.mockImplementation(async (_q, _s, d) => { for (const p of parts) d?.(p); return final; });
+  };
+  beforeEach(() => {
+    speaker = { speak: vi.fn(async (t: string) => Int16Array.of(t.length)) };
+    sp = new Session({ game, interpreter: new Interpreter(new Jev({ backend: new StandinJev(), logFile: null }), new StandinJev()), answerer, jev: 'standin', speaker });
+    voices = []; hushes = 0;
+    sp.on('voice', (id: number, pcm: Int16Array) => voices.push([id, pcm]));
+    sp.on('hush', () => hushes++);
+  });
+
+  it("speaks each sentence of the player's answer, in order", async () => {
+    streams(['Onix is weak to Water.', 'Onix is weak to Water. Use Bubble.']);
+    const ids: string[] = [];
+    sp.on('log', (e: LogEntry) => ids.push(e.id));
+    await sp.handleText(Q, 'human');
+    await sp.voiceQueue;
+    expect(speaker.speak.mock.calls.map((c) => c[0])).toEqual(['Onix is weak to Water.', 'Use Bubble.']);
+    expect(voices.map(([, pcm]) => pcm[0])).toEqual([22, 11]);
+    expect(voices.every(([id]) => String(id) === ids[0])).toBe(true);
+  });
+
+  it("never speaks an agent's question", async () => {
+    await sp.handleText(Q, 'agent');
+    await sp.voiceQueue;
+    expect(speaker.speak).not.toHaveBeenCalled();
+  });
+
+  it('skips a sentence the speaker could not make and carries on', async () => {
+    streams(['One. Two.']);
+    speaker.speak.mockResolvedValueOnce(null);
+    await sp.handleText(Q, 'human');
+    await sp.voiceQueue;
+    expect(speaker.speak).toHaveBeenCalledTimes(2);
+    expect(voices).toHaveLength(1);
+  });
+
+  it('speaks the final reply when it replaced what streamed', async () => {
+    streams(['Here is how. Then'], "I can't answer that one.");
+    await sp.handleText(Q, 'human');
+    await sp.voiceQueue;
+    expect(speaker.speak).toHaveBeenLastCalledWith("I can't answer that one.");
+    expect(hushes).toBeGreaterThanOrEqual(1);
+  });
+
+  it('stop hushes the voice and drops sentences not yet spoken', async () => {
+    streams(['One. Two. Three.']);
+    let release!: () => void;
+    speaker.speak.mockImplementationOnce((t) => new Promise((r) => { release = () => r(Int16Array.of(t.length)); }));
+    await sp.handleText(Q, 'human');
+    const before = hushes;
+    sp.stop('human');
+    release();
+    await sp.voiceQueue;
+    expect(hushes).toBe(before + 1);
+    expect(speaker.speak).toHaveBeenCalledTimes(1);
+    expect(voices).toHaveLength(0);
+  });
+
+  it('a new question cuts off the old answer', async () => {
+    streams(['Old one. Old two.']);
+    let release!: () => void;
+    speaker.speak.mockImplementationOnce((t) => new Promise((r) => { release = () => r(Int16Array.of(t.length)); }));
+    await sp.handleText(Q, 'human');
+    streams(['New one.']);
+    await sp.handleText(Q, 'human');
+    release();
+    await sp.voiceQueue;
+    expect(speaker.speak.mock.calls.map((c) => c[0])).toEqual(['Old one.', 'New one.']);
+    expect(voices.map(([, pcm]) => pcm[0])).toEqual([8]);
+  });
+
+  it('reports whether it can speak', () => {
+    expect(sp.info().speech).toBe(true);
+    expect(s.info().speech).toBe(false);
+  });
+});
