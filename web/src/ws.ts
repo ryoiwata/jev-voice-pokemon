@@ -14,6 +14,8 @@ export interface Connection {
   onFrame: React.MutableRefObject<((rgba: Uint8Array, mask: number) => void) | null>;
   /** called for every chunk of sound (Int16 stereo) */
   onAudio: React.MutableRefObject<((pcm: Int16Array) => void) | null>;
+  /** called the moment a log entry arrives or changes, before the page redraws */
+  onLog: React.MutableRefObject<((entry: LogEntry) => void) | null>;
 }
 
 const MAX_LOG = 200;
@@ -28,6 +30,7 @@ export function useConnection(): Connection {
   const wsRef = useRef<WebSocket | null>(null);
   const onFrame = useRef<((rgba: Uint8Array, mask: number) => void) | null>(null);
   const onAudio = useRef<((pcm: Int16Array) => void) | null>(null);
+  const onLog = useRef<((entry: LogEntry) => void) | null>(null);
 
   useEffect(() => {
     let closed = false, retry: ReturnType<typeof setTimeout>;
@@ -48,11 +51,11 @@ export function useConnection(): Connection {
         if (m.type === 'state') setState(m.state);
         else if (m.type === 'session') setSession(m);
         else if (m.type === 'saves') setSaves(m.names);
-        else if (m.type === 'log') setLog((old) => {
+        else if (m.type === 'log') { onLog.current?.(m.entry); setLog((old) => {
           const i = old.findIndex((x) => x.id === m.entry.id);
           if (i >= 0) { const next = old.slice(); next[i] = m.entry; return next; }
           return [...old, m.entry].slice(-MAX_LOG);
-        });
+        }); }
       };
     };
     open();
@@ -64,5 +67,5 @@ export function useConnection(): Connection {
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m));
   }, []);
 
-  return { connected, state, session, log, saves, send, onFrame, onAudio };
+  return { connected, state, session, log, saves, send, onFrame, onAudio, onLog };
 }

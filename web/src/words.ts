@@ -1,7 +1,7 @@
 // The game's names and codes, in words a player reads.
 
 /** REDS_HOUSE_2F → Reds House 2F; POKé BALL → Poké Ball. */
-export const pretty = (s: string) => s.toLowerCase().replace(/_/g, ' ').replace(/(^|[\s.\-'])(\p{L})/gu, (_, a, c) => a + c.toUpperCase()).replace(/\b(\d+)f\b/gi, '$1F');
+export const pretty = (s: string) => s.toLowerCase().replace(/_/g, ' ').replace(/(^|[\s.\-])(\p{L})/gu, (_, a, c) => a + c.toUpperCase()).replace(/\b(\d+)f\b/gi, '$1F');
 
 const STATUS: Record<string, string> = { POISON: 'poisoned', SLEEP: 'asleep', PARALYZED: 'paralysed', BURN: 'burned', FREEZE: 'frozen' };
 
