@@ -5,7 +5,7 @@ import type { Action, ActionResult } from '../actions/types.js';
 import { Control, Slot } from '../worker/control.js';
 
 const EMPTY: GameSnapshot = {
-  mode: 'boot', map: '', x: 0, y: 0, facing: '?', money: 0, badges: 0, pokedex: { seen: 0, owned: 0 }, playTime: '0:00',
+  mode: 'boot', map: '', x: 0, y: 0, facing: '?', playerName: '', badgeList: Array(8).fill(false), money: 0, badges: 0, pokedex: { seen: 0, owned: 0 }, playTime: '0:00',
   party: [], bag: [], battle: null, dialog: '', running: null,
 };
 

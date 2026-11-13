@@ -8,7 +8,7 @@ import type { GameSnapshot } from '../../src/game/snapshot.js';
 
 const A = (id: string, label: string, extra: Partial<Action> = {}) => ({ id, kind: 'interact', label, ...extra }) as Action;
 const S: GameSnapshot = {
-  mode: 'overworld', map: 'VIRIDIAN_CITY', x: 1, y: 1, facing: 'down', money: 0, badges: 0, pokedex: { seen: 0, owned: 0 }, playTime: '0:00',
+  mode: 'overworld', map: 'VIRIDIAN_CITY', x: 1, y: 1, facing: 'down', playerName: '', badgeList: Array(8).fill(false), money: 0, badges: 0, pokedex: { seen: 0, owned: 0 }, playTime: '0:00',
   party: [], bag: [], battle: null, dialog: '', running: null,
 };
 const acts = [
@@ -127,7 +127,7 @@ describe('what the model is shown', () => {
   const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
   const full: GameSnapshot = { ...S, x: 3, y: 6, facing: 'up', money: 3000, badges: 1, dialog: 'Hello!',
     party: [{ slot: 0, speciesId: 1, species: 'SQUIRTLE', nickname: 'SQUIRT', level: 12, hp: 28, maxHp: 35, status: 'OK', types: ['WATER'], moves: [{ id: 1, name: 'BUBBLE', type: 'WATER', power: 20, accuracy: 100, pp: 22, maxPp: 30 }] }],
-    bag: [{ name: 'POTION', qty: 2 }], battle: { kind: 'wild', enemy: { species: 'RATTATA', level: 4, hp: 9, maxHp: 15, status: 'OK' } } };
+    bag: [{ name: 'POTION', qty: 2 }], battle: { kind: 'wild', slot: 0, enemy: { species: 'RATTATA', level: 4, hp: 9, maxHp: 15, status: 'OK' } } };
 
   it('gets the game’s stats: position, party with HP and moves, bag, money, badges, battle', async () => {
     const spy = new Spy();
@@ -135,7 +135,7 @@ describe('what the model is shown', () => {
     expect(spy.last!.state).toMatchObject({
       said: 'open the menu', place: 'VIRIDIAN_CITY', player: { x: 3, y: 6, facing: 'up' }, money: 3000, badges: 1, onScreenText: 'Hello!',
       party: [{ name: 'SQUIRT', species: 'SQUIRTLE', level: 12, hp: '28/35', moves: ['BUBBLE 22/30'] }],
-      bag: ['POTION x2'], battle: { kind: 'wild', enemy: 'RATTATA Lv4', enemyHp: '9/15' },
+      bag: ['POTION x2'], battle: { kind: 'wild', slot: 0, enemy: 'RATTATA Lv4', enemyHp: '9/15' },
     });
   });
 

@@ -21,7 +21,7 @@ import { hasRom, hasFixture, boot, ROM_PATH } from '../helpers/rom.js';
 
 const A = (id: string, label: string, extra: Partial<Action> = {}) => ({ id, kind: 'interact', label, ...extra }) as Action;
 const S: GameSnapshot = {
-  mode: 'battle', map: 'ROUTE_1', x: 1, y: 1, facing: 'down', money: 0, badges: 0, pokedex: { seen: 0, owned: 0 }, playTime: '0:00',
+  mode: 'battle', map: 'ROUTE_1', x: 1, y: 1, facing: 'down', playerName: '', badgeList: Array(8).fill(false), money: 0, badges: 0, pokedex: { seen: 0, owned: 0 }, playTime: '0:00',
   party: [{ slot: 0, speciesId: 1, species: 'PIKACHU', nickname: 'SPARKY', level: 5, hp: 10, maxHp: 10, status: 'OK', types: [], moves: [] }],
   bag: [], battle: null, dialog: '', running: null,
 };
