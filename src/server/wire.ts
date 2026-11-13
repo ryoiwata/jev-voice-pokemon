@@ -6,6 +6,8 @@ import type { GameSnapshot } from '../game/snapshot.js';
 export const TAG_FRAME = 1; // + 1 byte of buttons held (see buttonMask) + 160*144*4 bytes RGBA
 export const TAG_AUDIO = 2; // + Int16 LE interleaved stereo
 export const AUDIO_RATE = 44151; // the emulator core's native output rate (4194304 / 95)
+/** Spoken answers: mono 16-bit at this rate. */
+export const VOICE_RATE = 22050;
 
 export type InputMode = 'voice' | 'text';
 export const INPUT_MODES: InputMode[] = ['voice', 'text'];
