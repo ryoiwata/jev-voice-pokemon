@@ -135,7 +135,7 @@ describe('what the model is shown', () => {
     expect(spy.last!.state).toMatchObject({
       said: 'open the menu', place: 'VIRIDIAN_CITY', player: { x: 3, y: 6, facing: 'up' }, money: 3000, badges: 1, onScreenText: 'Hello!',
       party: [{ name: 'SQUIRT', species: 'SQUIRTLE', level: 12, hp: '28/35', moves: ['BUBBLE 22/30'] }],
-      bag: ['POTION x2'], battle: { kind: 'wild', slot: 0, enemy: 'RATTATA Lv4', enemyHp: '9/15' },
+      bag: ['POTION x2'], battle: { kind: 'wild', enemy: 'RATTATA Lv4', enemyHp: '9/15' },
     });
   });
 

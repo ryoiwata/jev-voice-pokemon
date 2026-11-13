@@ -3,7 +3,7 @@ import { Answerer, gameContext, type StreamClient } from '../../src/answer/answe
 import type { GameSnapshot } from '../../src/game/snapshot.js';
 
 const S: GameSnapshot = {
-  mode: 'battle', map: 'VIRIDIAN_CITY', x: 1, y: 1, facing: 'down', money: 3120, badges: 2, pokedex: { seen: 11, owned: 4 }, playTime: '3:42',
+  mode: 'battle', map: 'VIRIDIAN_CITY', x: 1, y: 1, facing: 'down', playerName: 'RED', badgeList: [true, true, false, false, false, false, false, false], money: 3120, badges: 2, pokedex: { seen: 11, owned: 4 }, playTime: '3:42',
   party: [{ slot: 0, speciesId: 1, species: 'SQUIRTLE', nickname: 'SQUIRT', level: 12, hp: 28, maxHp: 35, status: 'OK', types: ['WATER'],
     moves: [{ id: 1, name: 'WATER GUN', type: 'WATER', power: 40, accuracy: 100, pp: 25, maxPp: 25 }] }],
   bag: [{ name: 'POTION', qty: 2 }], battle: { kind: 'wild', slot: 0, enemy: { species: 'GEODUDE', level: 9, hp: 20, maxHp: 24, status: 'OK' } },
