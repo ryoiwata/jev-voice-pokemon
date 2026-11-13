@@ -17,17 +17,13 @@ It is for someone who can see the screen but can't comfortably work a controller
 
 This is a fork of [christianmat/jev-pokemon](https://github.com/christianmat/jev-pokemon) by Christian Mathiesen, in which Jev plays the whole game by itself. The emulator wrapper, the game-memory reader, the pathfinding and the menu and battle button sequences come from that project.
 
-What this fork changes: the self-playing loop, objectives and strategy are gone. In their place are a list of "what can be done right now", a command interpreter, four ways to give commands, a new web page with sound, question answering, and a door for other AI agents.
+What this fork changes: the self-playing loop, objectives and strategy are gone. In their place are a list of "what can be done right now", a command interpreter, voice and typed commands, a new web page with sound, question answering, and a door for other AI agents.
 
 ## Status
 
-Built and tested against the local stand-in for Jev (see below); the real Jev has not been called yet. Three checks need the real Jev and have not been run yet:
+Built, tested, and played with the real Jev. Two things have not been checked by a person end to end: a full voice-only run from the title screen through the first rival battle, and throwing a ball at a wild Pokémon by voice.
 
-- declining a far-away request such as "go to Cerulean City" in every phrasing,
-- asking "did you mean…?" on a vague command such as "talk to him",
-- a full voice-only run from the title screen through the first rival battle.
-
-After adding `TYPESAFE_API_KEY` to `.env`, tune `ACT_MIN_P` and `ACT_MIN_MARGIN` using `logs/jev-calls.jsonl`, which records every command, the options offered and Jev's probabilities.
+`logs/jev-calls.jsonl` records every command, the options offered and Jev's probabilities; use it to tune `ACT_MIN_P` and `ACT_MIN_MARGIN`.
 
 ## Setup
 
@@ -53,18 +49,29 @@ npm start -- --load <name>     # load saves/<name>.state.json
 
 The game resumes from its last autosave (every five minutes and on quit). The game's own SAVE works as normal too.
 
-## Four ways to play
+## The page
 
-Switch between them with the buttons on the page, or by saying "voice mode", "text mode", "controls mode" or "agent mode".
+The game runs on a handheld drawn in the middle of the page. Its buttons move whenever the game receives a button press, whoever sent it: Jev carrying out your command, an agent, a click on the game screen, or your own keys.
+
+Under the command box a strip shows the current command as three steps: what you said, what Jev chose (and how sure it was), and the buttons being pressed. If the app is unsure it shows numbered choices there instead; if you asked a question, the answer appears there and no buttons are pressed.
+
+Beside the console are the battle (when there is one), your party, a trainer card with your badges, and your bag. The pictures of Pokémon and of the player are read from your own ROM while the app runs and are never stored.
+
+## Ways to play
+
+The switch under the console has two positions. You can also say "voice mode" or "text mode".
 
 | Mode | How commands arrive |
 |---|---|
 | **Voice** | Dictate into the command box. The text sends itself once it stops changing (0.8 s by default). |
 | **Text** | Type a command and press Enter. |
-| **Controls** | The keyboard plays the game: arrows, `Z` = A, `X` = B, `Enter` = START, `Shift` = SELECT. |
-| **Agent** | An outside AI agent may play. You can still say "stop" or "voice mode" to take over. |
 
-In every mode: `Esc` or the Stop button halts whatever is running, the on-screen gamepad works, and clicking a spot on the game screen walks there (clicking a person or thing interacts with it).
+These always work, in either mode:
+
+- `Esc` or the Stop button halts whatever is running.
+- The console's own buttons: click, or press and hold.
+- Clicking a spot on the game screen walks there (clicking a person or thing interacts with it).
+- The keyboard plays the game whenever you are not typing in a box: arrows, `Z` = A, `X` = B, `Enter` = START, `Shift` = SELECT. In Voice mode the command box keeps the focus for dictation, so switch to Text and click the console to play by keys.
 
 ### What you can say
 
@@ -75,14 +82,14 @@ In every mode: `Esc` or the Stop button halts whatever is running, the on-screen
 - **Things on screen, by name:** "talk to the nurse", "enter the Poké Mart", "read the sign", "pick up the item ball", "use the PC", "go north to Route 1".
 - **In battle:** "use Ember", "throw Poké Ball", "switch to Pidgey", "use Potion", "run".
 - **In menus:** say the option: "yes", "no", "item", "Pokémon". "Go back" closes a menu. (The word "save" on its own is the app's quick save; "save the game" is the game's own SAVE.)
-- **Always, with no AI involved:** "stop", "next", "left three", "press A", "start", "save", "load", "name him Sparky" (on a naming screen).
+- **Always, with no AI involved:** "stop", "next", "left three", "press A", "start", "save", "load", "voice mode", "text mode", "name him Sparky" (on a naming screen).
 - **Questions:** anything phrased as a question goes to Claude with your current party, bag and location.
 
 Plain dialogue continues by itself at a readable pace and stops whenever the game asks you to choose. Full-screen pages (a Pokémon's stats, a Pokédex entry, the map) stay up until you say "next". You can turn auto-continue off or change the pace in Settings.
 
 "Stop" is heard however it comes out: "stop", "stop it", "please stop", "wait, stop". Saying it, a newer command, or any button press also cancels a command that is still being worked out.
 
-If the app is unsure which thing you meant, it shows up to three numbered guesses; say "one", "two" or "three", or click one. Hard-to-undo actions (tossing an item, releasing a Pokémon, a Master Ball, overwriting a move) need a closer match before they run unasked.
+If the app is unsure which thing you meant, it shows up to three numbered guesses under the command box; say "one", "two" or "three", or click one. Hard-to-undo actions (tossing an item, releasing a Pokémon, a Master Ball, overwriting a move) need a closer match before they run unasked.
 
 The app never answers the game's own questions for you. If "toss the Potion" leads to "Is it OK to toss?", it stops there for your yes or no. One exception: when your sentence already contains the answer ("use Potion on Pikachu"), it carries on through the game's "which Pokémon?" prompt.
 
@@ -127,7 +134,7 @@ claude mcp add --transport http pokemon http://127.0.0.1:8787/mcp
 
 | Tool | What it does |
 |---|---|
-| `get_state` | Location, party, bag, battle, text on screen, input mode |
+| `get_state` | Location, party, bag, badges, battle, text on screen, input mode |
 | `get_screen` | The current screen as a PNG |
 | `list_actions` | Everything doable right now, each with an id |
 | `do_action` | Carry out one listed action and wait for the outcome |
@@ -137,7 +144,13 @@ claude mcp add --transport http pokemon http://127.0.0.1:8787/mcp
 | `stop` | Stop whatever is running |
 | `save_state`, `load_state` | Named saves |
 
-An agent can always read. It can act only while you have the page in **Agent** mode, and anything you do there (a click, a button, "stop") takes the controls back: an agent is refused while something you started is running or while you hold a button.
+An agent can always read, and it can act whenever you are not doing something yourself. You always come first:
+
+- An agent is refused while something you started is running or while you hold a button.
+- Anything you do (a command, a click, a button) takes the controls back from an agent's running action.
+- After you press Stop or say "stop", agents are held off for five seconds.
+
+What an agent does shows on the page like anything else: the console's buttons move, and the entry in the list is tagged "agent".
 
 ## How it works
 
@@ -152,20 +165,21 @@ An agent can always read. It can act only while you have the page in **Agent** m
 ```
 
 - The emulator runs in its own thread in real time. Stop and held buttons reach it through shared memory, so they work in the middle of a walk.
+- Every picture frame sent to the page carries the buttons held during it, which is how the console's buttons stay in step with the game.
 - The **action list** is rebuilt from game memory whenever the situation changes. Hidden items are never listed: a player can't see them either.
 - The app only presses buttons. It never writes game memory.
 - The server listens on `127.0.0.1` only, refuses connections from other websites or host names (set `DEV_ORIGIN` if you run the page with `npm run dev`), and keeps keys on the server.
 
 | Path | What |
 |---|---|
-| `src/emu/`, `src/game/` | emulator wrapper, memory reader, map grid, pathfinding (from the reference) |
+| `src/emu/`, `src/game/` | emulator wrapper, memory reader, map grid, pathfinding (from the reference); `src/game/pics.ts` decodes pictures from the ROM |
 | `src/actions/` | what can be done now, and how each thing is carried out |
 | `src/worker/` | the game thread and its control block |
 | `src/interpret/`, `src/jev/` | fixed grammar, interpreter, Jev client, local stand-in |
 | `src/answer/` | question answering |
 | `src/server/` | HTTP, WebSocket, session (modes and the command pipeline), MCP |
 | `web/` | the page |
-| `docs/superpowers/` | the design and the build plan |
+| `docs/superpowers/` | the designs and the build plans |
 
 ## Tests
 
@@ -179,7 +193,7 @@ npx tsx scripts/make-fixtures.ts  # builds save-state fixtures from your ROM by 
 ## Legal
 
 - **No ROM included.** This repo doesn't contain or link to Pokémon Red, and you need your own legally obtained copy. `roms/` and `saves/` are gitignored.
-- **No Nintendo assets.** Game data (symbols, names, maps, font) is read at runtime from *your* ROM. The symbol file is generated locally from the [pret/pokered](https://github.com/pret/pokered) disassembly during `npm run setup`, which clones it into `vendor/`. That disassembly isn't redistributed here, and `vendor/` and `src/data/generated.json` are gitignored.
+- **No Nintendo assets.** Game data (symbols, names, maps, font, pictures) is read at runtime from *your* ROM. The console on the page is a generic drawn handheld and the bag's icons are original. The symbol file is generated locally from the [pret/pokered](https://github.com/pret/pokered) disassembly during `npm run setup`, which clones it into `vendor/`. That disassembly isn't redistributed here, and `vendor/` and `src/data/generated.json` are gitignored.
 - **Not affiliated.** Pokémon is a trademark of Nintendo, Creatures Inc. and GAME FREAK inc. This is a fan project, not affiliated with or endorsed by Nintendo, Game Freak, The Pokémon Company, TypeSafe AI, Anthropic or Wispr.
 - **License.** GPL-2.0-or-later (see [`LICENSE`](LICENSE)), as the reference is, because it builds on the GPL-licensed [serverboy](https://gitlab.com/piglet-plays/serverboy.js) / GameBoy-Online emulator core.
 
