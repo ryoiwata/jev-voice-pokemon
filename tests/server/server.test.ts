@@ -25,7 +25,7 @@ describe.skipIf(!hasRom)('server', () => {
     const ws = new WebSocket(url.replace('http', 'ws') + '/ws');
     let state: any = null, frames = 0;
     ws.on('message', (d: Buffer, isBinary: boolean) => {
-      if (isBinary) { if (d[0] === 1 && d.length === 1 + 160 * 144 * 4) frames++; }
+      if (isBinary) { if (d[0] === 1 && d[1] === 0 && d.length === 2 + 160 * 144 * 4) frames++; }
       else { const m = JSON.parse(String(d)); if (m.type === 'state') state = m.state; }
     });
     await once(ws, 'open');

@@ -11,7 +11,7 @@ const EMPTY: GameSnapshot = {
 
 /**
  * The main thread's handle on the game. The game itself lives in a worker thread.
- * Events: 'frame' (Uint8Array rgba 160x144), 'audio' (Int16Array stereo interleaved), 'state', 'actions', 'log'.
+ * Events: 'frame' (Uint8Array: one byte of buttons held, then rgba 160x144), 'audio' (Int16Array stereo interleaved), 'state', 'actions', 'log'.
  */
 export class GameClient extends EventEmitter {
   readonly ctl = new Control();

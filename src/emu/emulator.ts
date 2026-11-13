@@ -12,7 +12,8 @@ export type Button = 'A' | 'B' | 'START' | 'SELECT' | 'UP' | 'DOWN' | 'LEFT' | '
 export class Emulator {
   private gb: any;
   frames = 0;
-  onFrame?: (screen: ArrayLike<number>, frame: number) => void;
+  /** Called after every frame with the picture, the frame count, and the buttons that were held during it. */
+  onFrame?: (screen: ArrayLike<number>, frame: number, held: Button[]) => void;
 
   constructor(rom: Buffer) {
     this.gb = new Gameboy();
@@ -53,7 +54,7 @@ export class Emulator {
     if (hold.length) this.gb.pressKeys(hold);
     this.gb.doFrame();
     this.frames++;
-    this.onFrame?.(this.gb.getScreen(), this.frames);
+    this.onFrame?.(this.gb.getScreen(), this.frames, hold);
   }
 
   wait(n: number) {

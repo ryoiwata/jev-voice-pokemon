@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseClientMsg } from '../../src/server/wire.js';
+import { parseClientMsg, buttonMask, maskButtons } from '../../src/server/wire.js';
 
 describe('parseClientMsg', () => {
   it('accepts a well-formed button message', () => {
@@ -24,5 +24,16 @@ describe('parseClientMsg', () => {
     expect(parseClientMsg('{"type":"set","key":"mode","value":"agent"}')).toBeNull();
     expect(parseClientMsg('{"type":"set","key":"mode","value":"controls"}')).toBeNull();
     expect(parseClientMsg('{"type":"set","key":"mode","value":"turbo"}')).toBeNull();
+  });
+});
+
+describe('button masks', () => {
+  it('packs buttons into one byte and back', () => {
+    expect(buttonMask([])).toBe(0);
+    expect(buttonMask(['A'])).toBe(1);
+    expect(buttonMask(['A', 'RIGHT'])).toBe(1 | 128);
+    expect(buttonMask(['RIGHT', 'A', 'A'])).toBe(1 | 128);
+    expect(maskButtons(1 | 128)).toEqual(['A', 'RIGHT']);
+    expect(maskButtons(0)).toEqual([]);
   });
 });

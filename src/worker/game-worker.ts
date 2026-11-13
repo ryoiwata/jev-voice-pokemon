@@ -14,6 +14,7 @@ import { listActions, runAction, tileAction } from '../actions/index.js';
 import { tap } from '../actions/nav.js';
 import { AutoAdvance } from '../actions/advance.js';
 import { Control, Slot, StopError } from './control.js';
+import { buttonMask } from '../server/wire.js';
 
 const { sab, romPath, resume, autosave } = workerData as { sab: SharedArrayBuffer; romPath: string; resume?: string; autosave: boolean };
 const port = parentPort!;
@@ -67,7 +68,10 @@ function pushState(force = false) {
   port.postMessage({ type: 'state', state: snap });
 }
 
-emu.onFrame = (screen) => {
+// every button held since the last picture went out, so a short tap shows even when most frames are skipped
+let heldSinceSent = 0;
+emu.onFrame = (screen, _n, held) => {
+  if (held.length) heldSinceSent |= buttonMask(held);
   const speed = ctl.get(Slot.SPEED_X100);
   if (speed !== paceSpeed) { paceSpeed = speed; paceStart = Date.now(); paceSlices = 0; }
   if (speed > 0) {
@@ -81,7 +85,9 @@ emu.onFrame = (screen) => {
   const now = Date.now();
   if (now - lastFrameSent >= 16) {
     lastFrameSent = now;
-    const buf = Uint8Array.from(screen as ArrayLike<number>);
+    const buf = new Uint8Array(1 + (screen as ArrayLike<number>).length);
+    buf[0] = heldSinceSent; heldSinceSent = 0;
+    buf.set(screen as ArrayLike<number>, 1);
     port.postMessage({ type: 'frame', frame: buf }, [buf.buffer]);
   }
   pushState();

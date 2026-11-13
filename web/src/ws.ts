@@ -10,8 +10,8 @@ export interface Connection {
   log: LogEntry[];
   saves: string[];
   send(m: ClientMsg): void;
-  /** called for every video frame (RGBA, 160x144) */
-  onFrame: React.MutableRefObject<((rgba: Uint8Array) => void) | null>;
+  /** called for every video frame (RGBA, 160x144) with the buttons held during it (see buttonMask) */
+  onFrame: React.MutableRefObject<((rgba: Uint8Array, mask: number) => void) | null>;
   /** called for every chunk of sound (Int16 stereo) */
   onAudio: React.MutableRefObject<((pcm: Int16Array) => void) | null>;
 }
@@ -26,7 +26,7 @@ export function useConnection(): Connection {
   const [log, setLog] = useState<LogEntry[]>([]);
   const [saves, setSaves] = useState<string[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
-  const onFrame = useRef<((rgba: Uint8Array) => void) | null>(null);
+  const onFrame = useRef<((rgba: Uint8Array, mask: number) => void) | null>(null);
   const onAudio = useRef<((pcm: Int16Array) => void) | null>(null);
 
   useEffect(() => {
@@ -40,7 +40,7 @@ export function useConnection(): Connection {
       ws.onmessage = (e) => {
         if (typeof e.data !== 'string') {
           const bytes = new Uint8Array(e.data as ArrayBuffer);
-          if (bytes[0] === TAG_FRAME) onFrame.current?.(bytes.subarray(1));
+          if (bytes[0] === TAG_FRAME) onFrame.current?.(bytes.subarray(2), bytes[1]);
           else if (bytes[0] === TAG_AUDIO) onAudio.current?.(new Int16Array(bytes.slice(1).buffer));
           return;
         }

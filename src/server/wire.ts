@@ -3,13 +3,17 @@ import type { Button } from '../emu/emulator.js';
 import type { GameSnapshot } from '../game/snapshot.js';
 
 /** Binary messages: first byte is the tag. */
-export const TAG_FRAME = 1; // + 160*144*4 bytes RGBA
+export const TAG_FRAME = 1; // + 1 byte of buttons held (see buttonMask) + 160*144*4 bytes RGBA
 export const TAG_AUDIO = 2; // + Int16 LE interleaved stereo
 export const AUDIO_RATE = 44151; // the emulator core's native output rate (4194304 / 95)
 
 export type InputMode = 'voice' | 'text';
 export const INPUT_MODES: InputMode[] = ['voice', 'text'];
 export const BUTTONS: Button[] = ['A', 'B', 'START', 'SELECT', 'UP', 'DOWN', 'LEFT', 'RIGHT'];
+
+/** Buttons as one byte: bit i is BUTTONS[i]. */
+export const buttonMask = (buttons: readonly Button[]): number => buttons.reduce((m, b) => m | (1 << BUTTONS.indexOf(b)), 0);
+export const maskButtons = (mask: number): Button[] => BUTTONS.filter((_, i) => mask & (1 << i));
 
 export type Source = 'human' | 'agent';
 export interface LogEntry {
