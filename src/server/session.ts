@@ -3,7 +3,8 @@ import type { Button } from '../emu/emulator.js';
 import type { Action, ActionResult } from '../actions/types.js';
 import type { GameSnapshot } from '../game/snapshot.js';
 import type { Interpreter } from '../interpret/interpreter.js';
-import { fastPath } from '../interpret/fastpath.js';
+import { fastPath, isStop } from '../interpret/fastpath.js';
+import { splitParts } from '../interpret/parts.js';
 import { nameWords } from '../interpret/name.js';
 
 const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty'];
@@ -135,6 +136,10 @@ export class Session extends EventEmitter {
    * command, a button press, a mode change) bumps it; the older command sees the change and gives up.
    */
   private gen = 0;
+  /** Counts everything that should end a chain of commands in progress: a stop, a button, a click, a new command or action. */
+  private bumps = 0;
+  /** The most actions one command may take when the model keeps finding a next step. */
+  static readonly MAX_ROUNDS = 8;
 
   /** A human doing anything takes the controls back from an agent's running action. */
   private takeOver(source: Source) {
@@ -142,6 +147,7 @@ export class Session extends EventEmitter {
   }
 
   stop(source: Source): void {
+    this.bumps++;
     if (source === 'human') this.agentHoldUntil = this.now() + Session.AGENT_HOLD_MS;
     this.gen++;
     this.deps.game.stop();
@@ -163,7 +169,7 @@ export class Session extends EventEmitter {
   rawButton(kind: 'down' | 'up' | 'tap', button: Button): void {
     const { game } = this.deps;
     if (kind === 'up') { game.ctl.release(button); return; }
-    this.gen++;
+    this.gen++; this.bumps++;
     this.dropPending(); // the screen is about to change under any open "did you mean"
     if (game.busy) { this.takeOver('human'); game.stop(); }
     game.ctl.press(button);
@@ -196,7 +202,7 @@ export class Session extends EventEmitter {
   async runAction(id: string, source: Source, arg?: unknown): Promise<Outcome> {
     const no = this.refusal(source);
     if (no) return no;
-    this.gen++;
+    this.gen++; this.bumps++;
     this.dropPending();
     const a = this.deps.game.actions.find((x) => x.id === id);
     return this.exec(a ?? { id, label: id }, source, arg, undefined);
@@ -206,7 +212,7 @@ export class Session extends EventEmitter {
   async press(buttons: Button[], source: Source): Promise<Outcome> {
     const no = this.refusal(source);
     if (no) return no;
-    this.gen++;
+    this.gen++; this.bumps++;
     this.dropPending();
     let r: Outcome = { status: 'nothing', message: '' };
     for (const b of buttons) {
@@ -245,7 +251,7 @@ export class Session extends EventEmitter {
   }
   private async clickInner(col: number, row: number): Promise<Outcome> {
     const { game } = this.deps;
-    const g = ++this.gen;
+    const g = ++this.gen; this.bumps++;
     // The game thread can only say what a click means between actions, so whatever is running (the
     // player's own walk, or an agent's action) is stopped first. The click then means what is on screen.
     if (game.busy) { this.takeOver('human'); game.stop(); }
@@ -270,9 +276,27 @@ export class Session extends EventEmitter {
 
   /** A typed or dictated command, from the player or from an agent. */
   async handleText(text: string, source: Source): Promise<Outcome> {
-    if (source !== 'human') return this.handleTextInner(text, source);
+    this.bumps++;
+    if (source !== 'human') return this.handleParts(text, source);
     this.thinking++;
-    try { return await this.handleTextInner(text, source); } finally { this.thinking--; }
+    try { return await this.handleParts(text, source); } finally { this.thinking--; }
+  }
+
+  /**
+   * One sentence can hold several commands ("get around the boy and continue east"). Each part is carried
+   * out in turn as a command of its own, and the chain ends at the first part that does not simply finish:
+   * a question from the game, a failure, a "did you mean", a stop, or anything else the player does meanwhile.
+   */
+  private async handleParts(text: string, source: Source): Promise<Outcome> {
+    const parts = isStop(text) ? [] : splitParts(text);
+    if (parts.length <= 1) return this.handleTextInner(text, source);
+    const mark = this.bumps;
+    let r: Outcome = { status: 'nothing', message: '' };
+    for (const part of parts) {
+      r = await this.handleTextInner(part, source);
+      if (r.status !== 'done' || this.bumps !== mark) break;
+    }
+    return r;
   }
   private async handleTextInner(text: string, source: Source): Promise<Outcome> {
     const { game, interpreter, answerer } = this.deps;
@@ -390,8 +414,20 @@ export class Session extends EventEmitter {
           const again = await interpreter.interpret(said, game.actions, game.state, { strict: true, justDid: first.action.label });
           if (!superseded() && !this.refusal(source) && again.kind === 'act' && again.action.id !== first.action.id) r = await this.exec(again.action, source, undefined, said, '', { by: chooser(again), sure: again.p });
         }
+        // A command can need more than one action ("go round the boy to the sign"). After each one the model
+        // is asked what, if anything, comes next, and it may say everything is done. It never repeats an
+        // action, never goes on into something hard to undo, and never goes past anything the game asks.
+        const did = [first.action];
+        while (r.status === 'done' && did.length < Session.MAX_ROUNDS && !superseded() && !this.refusal(source)) {
+          const next = await interpreter.interpret(said, game.actions, game.state, { progress: did.map((a) => a.label) });
+          if (superseded() || this.refusal(source)) break;
+          if (next.kind !== 'act' || next.action.costly || did.some((a) => a.id === next.action.id)) break;
+          did.push(next.action);
+          r = await this.exec(next.action, source, next.action.kind === 'steps' ? stepCount(said) : undefined, said, '', { by: chooser(next), sure: next.p });
+        }
         return r;
       }
+      case 'done': return { status: 'nothing', message: '' };
     }
   }
 }

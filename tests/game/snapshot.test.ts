@@ -20,3 +20,13 @@ describe.skipIf(!hasRom)('snapshot before the game starts', () => {
     expect(s.badgeList).toEqual(Array(8).fill(false));
   });
 });
+
+describe.skipIf(!hasFixture('fx-lab'))('snapshot: what is next to the player', () => {
+  it('says what is on each side, in compass words', () => {
+    const s = snapshot(boot('fx-lab'));   // rival to the west, Oak to the north, a Poké Ball on the table to the east, floor to the south
+    expect(s.around).toEqual({ north: 'someone or something is standing there', south: 'open ground', west: 'someone or something is standing there', east: 'someone or something is standing there' });
+  });
+  it('is absent when the player is not walking around', () => {
+    expect(snapshot(boot()).around).toBeUndefined();
+  });
+});

@@ -77,6 +77,8 @@ These always work, in either mode:
 
 - **Moving about, however you say it:** "move to the right", "go north", "a couple of steps left", "walk up three steps", "forward" (the way you are facing).
 - **Until something is in the way:** "keep going north", "continue", "keep going", "all the way down", "go left until something is in the way".
+- **Several things in one go:** "get around the boy and continue east", "leave the grass, then read the sign", "open the menu and save the game". Each part is carried out in turn, and the chain ends at the first part that does not simply finish (the game asks something, a part can't be done, or you say stop).
+- **Around people:** "go around the boy", "walk past her". Walking in a direction also goes around a person standing in the way ("left three" ends three squares to the left).
 - **Grass and water you can see:** "go into the grass", "the grass on the left", "get out of the grass", "go to the water". These are read from the map itself and cover what is on the screen.
 - **Furniture and scenery:** "move in front of the bed", "go to the table", "walk over to the TV". This works where the scenery is in the app's table (`src/game/landmarks.ts`), which so far covers Red's house and Oak's lab; elsewhere, click the spot on the game screen or use steps.
 - **People by what they look like:** "talk to the man", "talk to the girl", "the nearest person". Each character is described to Jev (a man, an old woman, the nurse) along with where they stand.
@@ -92,6 +94,8 @@ Plain dialogue continues by itself at a readable pace and stops whenever the gam
 "Stop" is heard however it comes out: "stop", "stop it", "please stop", "wait, stop". In Voice mode it is sent the moment it lands in the command box, without the usual pause, and it works at any time: while the character is walking, while Jev is still working out a command, and even when it arrives on the end of another command that had not been sent yet ("walk to the door… stop" just stops). A newer command or any button press also cancels a command that is still being worked out.
 
 If the app is unsure which thing you meant, it shows up to three numbered guesses under the command box; say "one", "two" or "three", or click one. Hard-to-undo actions (tossing an item, releasing a Pokémon, a Master Ball, overwriting a move) need a closer match before they run unasked.
+
+After each action Jev is asked once more whether the command needs anything further, and usually answers that it is done. When a command does need another step, it takes it: up to eight actions for one command, never the same one twice, never one that is hard to undo, and never past anything the game asks.
 
 The app never answers the game's own questions for you. If "toss the Potion" leads to "Is it OK to toss?", it stops there for your yes or no. One exception: when your sentence already contains the answer ("use Potion on Pikachu"), it carries on through the game's "which Pokémon?" prompt.
 
@@ -120,7 +124,7 @@ Adding Pokémon and move names to Wispr Flow's dictionary improves how they are 
 | `ANTHROPIC_API_KEY` | Turns on question answering. Without it everything else still works. |
 | `ANSWER_MODEL` | The Claude model for answers (default `claude-sonnet-5-5`). |
 
-With each command Jev is given the game's facts (where you are and which way you face, your party with HP and moves, your bag, money, badges, any battle, the text on screen) and a picture of the screen. In trials Jev could not recognise things in Game Boy graphics (asked to find the bed, the plant or the player, it rated each "not visible"), so it is the facts and the list of options that do the work; the picture is sent for when its vision improves.
+With each command Jev is given the game's facts (where you are and which way you face, what is on the square on each side of you, your party with HP and moves, your bag, money, badges, any battle, the text on screen) and a picture of the screen. In trials Jev could not recognise things in Game Boy graphics (asked to find the bed, the plant or the player, it rated each "not visible"), so it is the facts and the list of options that do the work; the picture is sent for when its vision improves.
 
 The stand-in matches your words against the names of the things on offer. It handles commands that name the thing ("walk to the Poké Ball", "use Ember") and nothing cleverer. If the real Jev is down or slow, that one command falls back to the stand-in and the log says so.
 

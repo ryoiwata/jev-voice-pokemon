@@ -244,7 +244,7 @@ function candidates(ctx: Ctx): Candidate[] {
     }
     patches.push({ tiles, mine: tiles.has(`${px},${py}`) });
   }
-  const GRASS_HINT = 'Walk into the tall grass (the long grass where wild Pokémon appear) and stand in it';
+  const GRASS_HINT = 'Walk into the tall grass (the long grass where wild Pokémon appear) and stand in it ("go into the grass", "get in the grass", "walk into that patch")';
   const intoGrass: Candidate[] = [];
   for (const p of patches) {
     if (p.mine) continue; // already standing in this one
@@ -261,7 +261,7 @@ function candidates(ctx: Ctx): Candidate[] {
     const path = findPath(g, px, py, (x, y) => inView(x, y) && !g.grass(x, y), { blocked, surf, maxNodes: 4000 });
     if (path?.length) {
       const end = path[path.length - 1];
-      add({ id: `terrain:clear:${end.x},${end.y}@${gs.mapId}`, kind: 'go', label: 'Leave the tall grass', hint: 'Leave the tall grass: walk out of the long grass onto open ground', at: { x: end.x, y: end.y } }, { kind: 'tile', x: end.x, y: end.y }, path);
+      add({ id: `terrain:clear:${end.x},${end.y}@${gs.mapId}`, kind: 'go', label: 'Leave the tall grass', hint: 'Leave the tall grass: walk out of the long grass the player is standing in, onto open ground ("get out of the grass", "leave the grass", "step out of the grass")', at: { x: end.x, y: end.y } }, { kind: 'tile', x: end.x, y: end.y }, path);
     }
   }
   if (!surf) {

@@ -567,3 +567,111 @@ describe('Session: terrain by its everyday name', () => {
     expect(game.ran).toEqual([{ id: 'terrain:grass:3,4@12', arg: undefined }]);
   });
 });
+
+describe('Session: a sentence with several commands', () => {
+  it('carries out each part in order, each as its own entry', async () => {
+    const r = await s.handleText('Walk to the poke ball and talk to the youngster to the north.', 'human');
+    expect(game.ran.map((x) => x.id)).toEqual(['npc:4', 'npc:2']);
+    expect(r.status).toBe('done');
+    const mine = logs.filter((l) => l.chose);
+    expect(mine.map((l) => l.heard)).toEqual(['Walk to the poke ball', 'talk to the youngster to the north']);
+  });
+  it('fixed-grammar parts work too, with their counts', async () => {
+    await s.handleText('left three then press a', 'human');
+    expect(game.ran).toEqual([{ id: 'steps:left', arg: 3 }, { id: 'press:A', arg: undefined }]);
+  });
+  it('stops at the first part that does not simply finish', async () => {
+    game.script = (id) => (id === 'npc:4' ? { status: 'prompt', message: 'It asks something.' } : { status: 'done', message: 'Done.' });
+    const r = await s.handleText('walk to the poke ball then talk to the youngster to the north', 'human');
+    expect(game.ran.map((x) => x.id)).toEqual(['npc:4']);
+    expect(r.status).toBe('prompt');
+  });
+  it('a part that cannot be done ends the chain and is reported', async () => {
+    const r = await s.handleText('walk to the poke ball then examine the unicorn', 'human');
+    expect(game.ran.map((x) => x.id)).toEqual(['npc:4']);
+    expect(r.status).toBe('failed');
+    expect(last()).toMatchObject({ status: 'failed', heard: 'examine the unicorn' });
+  });
+  it('stop during the first part means the rest never runs', async () => {
+    game.script = (id) => (id === 'npc:4' ? never() : { status: 'done', message: 'Done.' });
+    const p = s.handleText('walk to the poke ball then talk to the youngster to the north', 'human');
+    await sleep(20);
+    s.stop('human');
+    expect((await p).status).toBe('stopped');
+    await sleep(20);
+    expect(game.ran.map((x) => x.id)).toEqual(['npc:4']);
+  });
+  it('a button press between parts ends the chain', async () => {
+    game.script = async (id) => { if (id === 'npc:4') { s.rawButton('tap', 'B'); } return { status: 'done', message: 'Done.' }; };
+    await s.handleText('walk to the poke ball then talk to the youngster to the north', 'human');
+    expect(game.ran.map((x) => x.id)).toEqual(['npc:4']);
+  });
+  it('an agent’s chain gives way to the player part-way through', async () => {
+    game.script = (id) => (id === 'npc:4' ? never() : { status: 'done', message: 'Done.' });
+    const p = s.handleText('walk to the poke ball then talk to the youngster to the north', 'agent');
+    await sleep(20);
+    await s.runAction('npc:3', 'human');
+    expect((await p).status).toBe('interrupted');
+    expect(game.ran.map((x) => x.id)).toEqual(['npc:4', 'npc:3']);
+  });
+});
+
+describe('Session: carrying on until the command is done', () => {
+  /** A real-model stand-in that answers each call with the next scripted choice. */
+  function scripted(choices: string[]) {
+    let n = 0; const seen: any[] = [];
+    const backend: JevBackend = { name: 'gateway', evaluate: async (req) => {
+      seen.push(req.state);
+      const choice = choices[Math.min(n++, choices.length - 1)];
+      return { answers: { intent: { type: 'choice', choice, probabilities: { [choice]: 0.95, __impossible: 0.05 } } }, usage: {} };
+    } };
+    const sess = new Session({ game, interpreter: new Interpreter(new Jev({ backend, logFile: null }), new StandinJev()), answerer, jev: 'gateway' });
+    return { sess, seen, calls: () => n };
+  }
+
+  it('asks the model again after each action and stops when it says everything is done', async () => {
+    const { sess, seen, calls } = scripted(['npc:4', 'npc:2', '__done']);
+    const r = await sess.handleText('get to the ball by way of the youngster', 'human');
+    expect(game.ran.map((x) => x.id)).toEqual(['npc:4', 'npc:2']);
+    expect(r.status).toBe('done');
+    expect(calls()).toBe(3);
+    expect(seen[1].alreadyDone).toEqual(['Examine the Poké Ball']);
+    expect(seen[2].alreadyDone).toEqual(['Examine the Poké Ball', 'Talk to Youngster to the north']);
+  });
+  it('never does the same thing twice for one command', async () => {
+    const { sess } = scripted(['npc:4', 'npc:4']);
+    await sess.handleText('go to the ball', 'human');
+    expect(game.ran.map((x) => x.id)).toEqual(['npc:4']);
+  });
+  it('never carries on into something hard to undo', async () => {
+    game.actions = [...WORLD, A('item:TOSS', 'Toss the POTION', { costly: true })];
+    const { sess } = scripted(['npc:4', 'item:TOSS']);
+    await sess.handleText('go to the ball', 'human');
+    expect(game.ran.map((x) => x.id)).toEqual(['npc:4']);
+  });
+  it('does not carry on past anything the game asks, or after a failure', async () => {
+    game.script = (id) => (id === 'npc:4' ? { status: 'interrupted', message: 'A wild Pokémon appeared.' } : { status: 'done', message: 'Done.' });
+    const { sess, calls } = scripted(['npc:4', 'npc:2']);
+    await sess.handleText('go to the ball', 'human');
+    expect(game.ran.map((x) => x.id)).toEqual(['npc:4']);
+    expect(calls()).toBe(1);
+  });
+  it('gives up after eight actions', async () => {
+    game.actions = Array.from({ length: 12 }, (_, i) => A(`npc:${i}`, `Thing number ${i}`));
+    const { sess } = scripted(game.actions.map((a) => a.id));
+    await sess.handleText('do the rounds', 'human');
+    expect(game.ran).toHaveLength(8);
+  });
+  it('stop ends it between actions', async () => {
+    const { sess } = scripted(['npc:4', 'npc:2', 'npc:3']);
+    game.script = async (id) => { if (id === 'npc:2') sess.stop('human'); return { status: 'done', message: 'Done.' }; };
+    await sess.handleText('go to the ball', 'human');
+    expect(game.ran.map((x) => x.id)).toEqual(['npc:4', 'npc:2']);
+  });
+  it('fixed-grammar commands are exact: nothing is asked afterwards', async () => {
+    const { sess, calls } = scripted(['npc:4']);
+    await sess.handleText('left three', 'human');
+    expect(game.ran).toEqual([{ id: 'steps:left', arg: 3 }]);
+    expect(calls()).toBe(0);
+  });
+});

@@ -180,3 +180,39 @@ describe('"fight" opens the move list; it does not pick a move', () => {
     expect(await standin().interpret('tackle', menu, S)).toMatchObject({ kind: 'act', action: { id: 'move:TACKLE' } });
   });
 });
+
+describe('Interpreter: carrying on with a command that needs more than one action', () => {
+  /** A stand-in for the real model that always answers with the given probabilities. */
+  const fixed = (probs: Record<string, number>, seen?: (req: JevRequest) => void): JevBackend => ({
+    name: 'gateway',
+    evaluate: async (req: JevRequest): Promise<JevResult> => {
+      seen?.(req);
+      const choice = Object.entries(probs).sort((a, b) => b[1] - a[1])[0][0];
+      return { answers: { intent: { type: 'choice', choice, probabilities: probs } }, usage: {} };
+    },
+  });
+  const withModel = (b: JevBackend) => new Interpreter(new Jev({ backend: b, logFile: null }), new StandinJev());
+
+  it('offers "everything is done" and tells the model what has been done so far', async () => {
+    let req: JevRequest | undefined;
+    const r = await withModel(fixed({ __done: 0.95, 'npc:2': 0.05 }, (q) => { req = q; })).interpret('go around the boy', acts, S, { progress: ['Go around Youngster'] });
+    expect(r.kind).toBe('done');
+    expect((req!.state as any).alreadyDone).toEqual(['Go around Youngster']);
+    expect(Object.keys((req!.questions.intent as any).criteria)).toContain('__done');
+  });
+  it('without progress there is no such option', async () => {
+    let req: JevRequest | undefined;
+    await withModel(fixed({ 'npc:2': 0.9 }, (q) => { req = q; })).interpret('talk to the youngster', acts, S);
+    expect(Object.keys((req!.questions.intent as any).criteria)).not.toContain('__done');
+    expect((req!.state as any).alreadyDone).toBeUndefined();
+  });
+  it('a next step needs a strong match; anything less means stop there', async () => {
+    expect(await withModel(fixed({ 'npc:2': 0.95, __done: 0.05 })).interpret('x', acts, S, { progress: ['A'] })).toMatchObject({ kind: 'act', action: { id: 'npc:2' } });
+    expect((await withModel(fixed({ 'npc:2': 0.7, __done: 0.3 })).interpret('x', acts, S, { progress: ['A'] })).kind).toBe('done');
+    expect((await withModel(fixed({ __impossible: 0.9, __done: 0.1 })).interpret('x', acts, S, { progress: ['A'] })).kind).toBe('done');
+    expect((await withModel(fixed({ __question: 0.9, __done: 0.1 })).interpret('x', acts, S, { progress: ['A'] })).kind).toBe('done');
+  });
+  it('the local word-matcher never carries on by itself', async () => {
+    expect((await standin().interpret('talk to the youngster to the north', acts, S, { progress: ['Open the menu'] })).kind).toBe('done');
+  });
+});
