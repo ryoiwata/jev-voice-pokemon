@@ -7,10 +7,9 @@ import { TopBar } from './TopBar';
 import { Sidebar } from './Sidebar';
 import { GameAudio } from './audio';
 import { PressTracker } from './pressed';
-import { DEFAULT_KEYMAP, buttonFor } from './keys';
+import { DEFAULT_KEYMAP, buttonFor, keysPlayGame } from './keys';
 
 const stored = (k: string, d: number) => { try { const v = localStorage.getItem(k); return v === null ? d : +v; } catch { return d; } };
-const typingInto = (t: EventTarget | null) => t instanceof HTMLElement && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT');
 
 export function App() {
   const conn = useConnection();
@@ -36,12 +35,12 @@ export function App() {
     return () => { conn.onLog.current = null; };
   }, [conn.onLog, tracker]);
 
-  // Esc always stops. The other keys play the game whenever the player is not typing somewhere.
+  // Esc always stops. The other keys play the game unless the player is typing or a page control has the focus.
   useEffect(() => {
     const held = new Set<Button>();
     const down = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { send({ type: 'stop' }); return; }
-      if (typingInto(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (!keysPlayGame(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
       const b = buttonFor(e, DEFAULT_KEYMAP);
       if (!b) return;
       e.preventDefault();

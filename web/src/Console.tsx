@@ -7,6 +7,24 @@ import { GameCanvas } from './GameCanvas';
 
 const NAMES: Record<Button, string> = { A: 'A', B: 'B', START: 'Start', SELECT: 'Select', UP: 'Up', DOWN: 'Down', LEFT: 'Left', RIGHT: 'Right' };
 
+/** One console button. Defined at module level so a redraw of the page never replaces a button that is being held. */
+function Pad({ b, cls, children, tracker, down, up, els }: {
+  b: Button; cls: string; children?: React.ReactNode; tracker: PressTracker; down: (b: Button) => void; up: (b: Button) => void; els: Map<Button, HTMLButtonElement>;
+}) {
+  const held = useRef(false);
+  const press = () => { if (held.current) return; held.current = true; tracker.local(b, true); down(b); };
+  // however the press ends (release, cancel, the browser taking the pointer away), let go exactly once
+  const release = () => { if (!held.current) return; held.current = false; tracker.local(b, false); up(b); };
+  return (
+    <button
+      type="button" className={cls} aria-label={NAMES[b]} tabIndex={-1}
+      ref={(el) => { if (el) els.set(b, el); else els.delete(b); }}
+      onPointerDown={(e) => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); press(); }}
+      onPointerUp={release} onPointerCancel={release} onLostPointerCapture={release}
+    >{children}</button>
+  );
+}
+
 /**
  * The handheld the game runs on. Its buttons are real buttons (press and hold works), and they are
  * drawn pressed whenever the game receives that button, whoever sent it.
@@ -28,24 +46,16 @@ export function Console({ conn, tracker, down, up, onTile }: {
     return () => cancelAnimationFrame(raf);
   }, [tracker]);
 
-  const B = ({ b, cls, children }: { b: Button; cls: string; children?: React.ReactNode }) => (
-    <button
-      type="button" className={cls} aria-label={NAMES[b]} tabIndex={-1}
-      ref={(el) => { if (el) els.current.set(b, el); else els.current.delete(b); }}
-      onPointerDown={(e) => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); tracker.local(b, true); down(b); }}
-      onPointerUp={() => { tracker.local(b, false); up(b); }}
-      onPointerCancel={() => { tracker.local(b, false); up(b); }}
-    >{children}</button>
-  );
+  const pad = { tracker, down, up, els: els.current };
 
   return (
-    <div className="gba" tabIndex={0} aria-label="Game console. While it has focus, the keyboard plays: arrows move, Z is A, X is B, Enter is Start, Shift is Select.">
+    <div className="gba" tabIndex={0} role="group" aria-label="Game console. While it has focus, the keyboard plays: arrows move, Z is A, X is B, Enter is Start, Shift is Select.">
       <div className="shoulder l" aria-hidden>L</div><div className="shoulder r" aria-hidden>R</div>
       <div className="wing">
         <div className="dpad"><i />
-          <B b="UP" cls="u">▲</B><B b="LEFT" cls="l">◀</B><B b="RIGHT" cls="r">▶</B><B b="DOWN" cls="d">▼</B>
+          <Pad {...pad} b="UP" cls="u">▲</Pad><Pad {...pad} b="LEFT" cls="l">◀</Pad><Pad {...pad} b="RIGHT" cls="r">▶</Pad><Pad {...pad} b="DOWN" cls="d">▼</Pad>
         </div>
-        <div className="pills"><B b="START" cls="pill">START</B><B b="SELECT" cls="pill">SELECT</B></div>
+        <div className="pills"><Pad {...pad} b="START" cls="pill">START</Pad><Pad {...pad} b="SELECT" cls="pill">SELECT</Pad></div>
       </div>
       <div className="bezel">
         <div className="lcd">
@@ -55,7 +65,7 @@ export function Console({ conn, tracker, down, up, onTile }: {
         <div className="mark" aria-hidden>VOICE BOY</div>
       </div>
       <div className="wing">
-        <div className="ab"><B b="B" cls="b">B</B><B b="A" cls="a">A</B></div>
+        <div className="ab"><Pad {...pad} b="B" cls="b">B</Pad><Pad {...pad} b="A" cls="a">A</Pad></div>
         <div className="grille" aria-hidden><b /><b /><b /><b /><b /></div>
       </div>
       <div className={`power ${conn.connected ? '' : 'off'}`} aria-hidden><i />POWER</div>

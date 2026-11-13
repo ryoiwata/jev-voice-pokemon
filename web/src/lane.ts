@@ -32,7 +32,7 @@ export function stripWords(e: LogEntry): StripWords {
   const spoken = !!e.heard;
   const saidLabel = spoken ? (agent ? 'An agent said' : 'You said') : agent ? 'An agent' : 'You';
   const said = spoken ? `“${e.heard}”` : agent ? 'Sent an action' : 'Clicked the screen';
-  const choseLabel = e.by === 'jev' ? 'Jev chose' : e.by === 'standin' ? 'Stand-in chose' : spoken ? 'Understood directly' : 'Doing';
-  const sure = e.sure === undefined || e.by === 'direct' ? null : `${Math.min(99, Math.max(1, Math.round(e.sure * 100)))}% sure`;
+  const choseLabel = e.by === 'jev' ? 'Jev chose' : e.by === 'standin' ? 'Stand-in chose' : e.by === 'picked' ? 'You picked' : spoken ? 'Understood directly' : 'Doing';
+  const sure = e.sure === undefined || e.by === 'direct' || e.by === 'picked' ? null : `${Math.min(99, Math.max(1, Math.round(e.sure * 100)))}% sure`;
   return { saidLabel, said, choseLabel, chose: e.chose ?? '', sure, pressingFor: agent ? 'for an agent' : 'for you' };
 }

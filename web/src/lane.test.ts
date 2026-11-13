@@ -56,3 +56,10 @@ describe('stripWords', () => {
     expect(stripWords(e('running', 0, { heard: 'x', chose: 'Y', sure: 0.001, by: 'jev' })).sure).toBe('1% sure');
   });
 });
+
+describe('stripWords for picks and notices', () => {
+  it('a pick from "did you mean" reads as the player’s pick', () => {
+    expect(stripWords(e('running', 0, { heard: 'talk to the person', chose: 'Talk to Clerk', by: 'picked' })))
+      .toMatchObject({ saidLabel: 'You said', said: '“talk to the person”', choseLabel: 'You picked', sure: null });
+  });
+});

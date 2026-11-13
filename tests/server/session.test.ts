@@ -185,7 +185,7 @@ describe('Session: what the log records about a choice', () => {
     await s.handleText('talk to the youngster', 'human');
     expect(last().status).toBe('asking');
     await s.handleText('two', 'human');
-    expect(last()).toMatchObject({ by: 'direct', chose: 'Talk to Youngster to the east' });
+    expect(last()).toMatchObject({ by: 'picked', chose: 'Talk to Youngster to the east' });
   });
   it('the chosen label carries no step count or result', async () => {
     await s.handleText('walk to the poke ball', 'human');
@@ -381,6 +381,70 @@ describe('Session: the player always wins', () => {
     expect(last().status).toBe('failed');
   });
 
+});
+
+describe('Session: an agent never gets in front of the player', () => {
+  it('an agent is refused while the player’s command is still being worked out, and that command still runs', async () => {
+    const { g, sess } = slowSession(120);
+    const mine = sess.handleText('walk to the poke ball', 'human');
+    await sleep(30);
+    expect(await sess.runAction('npc:2', 'agent')).toEqual({ status: 'refused', message: 'The player is doing something. Wait for it to finish.' });
+    expect((await sess.press(['A'], 'agent')).status).toBe('refused');
+    expect((await sess.handleText('step left', 'agent')).status).toBe('refused');
+    expect((await mine).status).toBe('done');
+    expect(g.ran.map((x) => x.id)).toEqual(['npc:4']);
+    expect((await sess.runAction('npc:2', 'agent')).status).toBe('done'); // and free again afterwards
+  });
+
+  it('an agent is refused while the player’s click is being worked out', async () => {
+    game.tileAction.mockImplementation(async () => { await sleep(80); return 'tile:3,3'; });
+    const mine = s.click(3, 3);
+    await sleep(20);
+    expect((await s.runAction('npc:2', 'agent')).status).toBe('refused');
+    expect((await mine).status).toBe('done');
+    expect(game.ran.map((x) => x.id)).toEqual(['tile:3,3']);
+  });
+
+  it('an agent cannot wipe a question the player has just been asked', async () => {
+    await s.handleText('talk to the youngster', 'human');
+    expect(last().status).toBe('asking');
+    expect((await s.runAction('npc:4', 'agent')).status).toBe('refused');
+    await s.handleText('two', 'human');
+    expect(game.ran.map((x) => x.id)).toEqual(['npc:3']);
+  });
+
+  it('a question the player leaves unanswered stops holding agents off after 30 s', async () => {
+    let t = 1000;
+    const sess = new Session({ game, interpreter: new Interpreter(new Jev({ backend: new StandinJev(), logFile: null }), new StandinJev()), answerer, jev: 'standin', now: () => t });
+    await sess.handleText('talk to the youngster', 'human');
+    expect((await sess.runAction('npc:4', 'agent')).status).toBe('refused');
+    t += 30_000;
+    expect((await sess.runAction('npc:4', 'agent')).status).toBe('done');
+  });
+});
+
+describe('Session: what the strip is told about follow-ups and picks', () => {
+  it('a follow-up step keeps the words the player said', async () => {
+    game.script = () => { game.actions = PARTY_MENU; return { status: 'prompt', message: 'Now choose.' }; };
+    await s.handleText('use potion on pikachu', 'human');
+    expect(game.ran.length).toBe(2);
+    expect(last()).toMatchObject({ heard: 'use potion on pikachu', chose: 'PIKACHU' });
+  });
+  it('a pick from "did you mean" is marked as the player’s pick and keeps the original words', async () => {
+    await s.handleText('talk to the youngster', 'human');
+    const q = last();
+    await s.choose(q.id, 0, 'human');
+    expect(last()).toMatchObject({ by: 'picked', chose: 'Talk to Youngster to the north', heard: 'talk to the youngster' });
+    await s.handleText('talk to the youngster', 'human');
+    await s.handleText('two', 'human');
+    expect(last()).toMatchObject({ by: 'picked', heard: 'two' });
+  });
+  it('a question dropped by a button press is closed in the log, so it stops being offered', async () => {
+    await s.handleText('talk to the youngster', 'human');
+    const q = last();
+    s.rawButton('tap', 'B');
+    expect(logs.find((l) => l.id === q.id)).toMatchObject({ status: 'stopped' });
+  });
 });
 
 describe('Session: naming screens', () => {

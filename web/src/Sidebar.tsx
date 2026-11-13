@@ -100,7 +100,7 @@ function Bag({ state }: { state: GameSnapshot }) {
     <section className="sec" aria-label="Bag">
       <h2>Bag <span>{n === 0 ? 'empty' : `${n} ${n === 1 ? 'kind' : 'kinds'} of item`}</span></h2>
       {n === 0 ? <p className="empty">The bag is empty.</p>
-        : <ul className="bag">{state.bag.map((i) => <li key={i.name}><ItemIcon kind={itemIcon(i.name)} />{pretty(i.name)}<em>×{i.qty}</em></li>)}</ul>}
+        : <ul className="bag">{state.bag.map((i, n) => <li key={`${n}-${i.name}`}><ItemIcon kind={itemIcon(i.name)} />{pretty(i.name)}<em>×{i.qty}</em></li>)}</ul>}
     </section>
   );
 }

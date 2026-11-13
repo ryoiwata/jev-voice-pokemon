@@ -48,6 +48,7 @@ const BUSY: Outcome = { status: 'refused', message: 'The player is doing somethi
 /** Who picked an action, and how surely when it was a model. */
 interface Why { by: Chooser; sure?: number }
 const DIRECT: Why = { by: 'direct' };
+const PICKED: Why = { by: 'picked' };
 const CANCELLED: Outcome = { status: 'stopped', message: 'Cancelled.' };
 const QUICK_SAVE = 'quick';
 
@@ -59,7 +60,12 @@ const QUICK_SAVE = 'quick';
 export class Session extends EventEmitter {
   mode: InputMode = 'voice';
   private nextLog = 1;
-  private pending: { logId: string; choices: Action[] } | null = null;
+  /** an open "did you mean": the log entry that asked, the choices, who was asked and what they had said */
+  private pending: { entry: LogEntry; logId: string; choices: Action[]; source: Source; heard: string; at: number } | null = null;
+  /** how many of the player's own commands or clicks are still being worked out (waiting on the model or the game thread) */
+  private thinking = 0;
+  /** An open question to the player holds agents off for this long at most, in case the player walks away from it. */
+  static readonly QUESTION_HOLD_MS = 30_000;
   /** the action that is running now: who started it, and whether the player has since taken over */
   private current: { source: Source; takenOver: boolean } | null = null;
 
@@ -109,11 +115,19 @@ export class Session extends EventEmitter {
   private refusal(source: Source): Outcome | null {
     if (source === 'human') return null;
     if (this.now() < this.agentHoldUntil) return JUST_STOPPED;
-    // the player comes first: an agent never replaces what the player started or is holding
-    if (this.current?.source === 'human' || this.deps.game.ctl.get(Slot.HELD) !== 0) return BUSY;
+    // the player comes first: an agent never replaces what the player started, is holding, is waiting on, or has been asked
+    if (this.current?.source === 'human' || this.deps.game.ctl.get(Slot.HELD) !== 0 || this.thinking > 0) return BUSY;
+    if (this.pending?.source === 'human' && this.now() - this.pending.at < Session.QUESTION_HOLD_MS) return BUSY;
     return null;
   }
   private mayAct(source: Source): boolean { return this.refusal(source) === null; }
+
+  /** Close an open "did you mean" that will not be answered, so the page stops offering it. */
+  private dropPending() {
+    const p = this.pending;
+    this.pending = null;
+    if (p && p.entry.status === 'asking') this.update(p.entry, 'stopped', 'Question dropped.');
+  }
 
   /**
    * Counts commands. Anything that should supersede a command still being worked out (stop, a newer
@@ -149,7 +163,7 @@ export class Session extends EventEmitter {
     const { game } = this.deps;
     if (kind === 'up') { game.ctl.release(button); return; }
     this.gen++;
-    this.pending = null; // the screen is about to change under any open "did you mean"
+    this.dropPending(); // the screen is about to change under any open "did you mean"
     if (game.busy) { this.takeOver('human'); game.stop(); }
     game.ctl.press(button);
     if (kind === 'tap') setTimeout(() => game.ctl.release(button), 100);
@@ -182,7 +196,7 @@ export class Session extends EventEmitter {
     const no = this.refusal(source);
     if (no) return no;
     this.gen++;
-    this.pending = null;
+    this.dropPending();
     const a = this.deps.game.actions.find((x) => x.id === id);
     return this.exec(a ?? { id, label: id }, source, arg, undefined);
   }
@@ -192,7 +206,7 @@ export class Session extends EventEmitter {
     const no = this.refusal(source);
     if (no) return no;
     this.gen++;
-    this.pending = null;
+    this.dropPending();
     let r: Outcome = { status: 'nothing', message: '' };
     for (const b of buttons) {
       r = await this.exec({ id: `press:${b}`, label: `Press ${b}` }, source, undefined, undefined);
@@ -225,6 +239,10 @@ export class Session extends EventEmitter {
 
   /** A click on the game screen: walk there, or interact with what is there. */
   async click(col: number, row: number): Promise<Outcome> {
+    this.thinking++;
+    try { return await this.clickInner(col, row); } finally { this.thinking--; }
+  }
+  private async clickInner(col: number, row: number): Promise<Outcome> {
     const { game } = this.deps;
     const g = ++this.gen;
     // The game thread can only say what a click means between actions, so whatever is running (the
@@ -233,7 +251,7 @@ export class Session extends EventEmitter {
     const id = await game.tileAction(col, row);
     if (g !== this.gen) return CANCELLED;
     if (!id) return { status: 'nothing', message: "Can't walk right now." };
-    this.pending = null;
+    this.dropPending();
     const a = this.deps.game.actions.find((x) => x.id === id);
     return this.exec(a ?? { id, label: 'Walk there' }, 'human', undefined, undefined);
   }
@@ -246,11 +264,16 @@ export class Session extends EventEmitter {
     const p = this.pending;
     if (!p || p.logId !== logId || !p.choices[index]) return { status: 'nothing', message: 'That question is no longer open.' };
     this.pending = null;
-    return this.exec(p.choices[index], source, undefined, undefined);
+    return this.exec(p.choices[index], source, undefined, p.heard, '', PICKED);
   }
 
   /** A typed or dictated command, from the player or from an agent. */
   async handleText(text: string, source: Source): Promise<Outcome> {
+    if (source !== 'human') return this.handleTextInner(text, source);
+    this.thinking++;
+    try { return await this.handleTextInner(text, source); } finally { this.thinking--; }
+  }
+  private async handleTextInner(text: string, source: Source): Promise<Outcome> {
     const { game, interpreter, answerer } = this.deps;
     const said = text.trim();
     if (!said) return { status: 'nothing', message: '' };
@@ -287,17 +310,17 @@ export class Session extends EventEmitter {
           const p = this.pending;
           if (!p?.choices[fast.index]) return { status: 'nothing', message: 'There is no such choice.' };
           this.pending = null;
-          return this.exec(p.choices[fast.index], source, undefined, said);
+          return this.exec(p.choices[fast.index], source, undefined, said, '', PICKED);
         }
         case 'run': {
-          this.pending = null;
+          this.dropPending();
           const a = game.actions.find((x) => x.id === fast.id);
           return this.exec(a ?? { id: fast.id, label: fast.id }, source, fast.arg, said);
         }
       }
     }
 
-    this.pending = null;
+    this.dropPending();
     // the real Jev is shown the game screen along with the facts; the stand-in cannot see, so no picture is taken for it
     const sees = this.deps.jev === 'gateway' && process.env.JEV_SEES_SCREEN !== '0';
     const image = sees && game.screenPng ? await game.screenPng().catch(() => undefined) : undefined;
@@ -345,7 +368,7 @@ export class Session extends EventEmitter {
           return { status: 'failed', message };
         }
         const entry = this.log(source, 'asking', `Did you mean…${note}`, said, first.options.map((o) => ({ id: o.id, label: o.label })));
-        this.pending = { logId: entry.id, choices: first.options };
+        this.pending = { entry, logId: entry.id, choices: first.options, source, heard: said, at: this.now() };
         return { status: 'asking', message: `Did you mean: ${first.options.map((o, i) => `${i + 1}) ${o.label}`).join('  ')}` };
       }
       case 'act': {
@@ -361,10 +384,10 @@ export class Session extends EventEmitter {
           if (nowNaming && !superseded() && !this.refusal(source)) {
             const done = new Set(first.action.label.toLowerCase().split(/[^a-z]+/));
             const words = nameWords(said).filter((w) => !done.has(w.toLowerCase()));
-            return words.length ? this.exec({ ...nowNaming, label: `Type ${words.join('').toUpperCase()}` }, source, { text: words.join('') }, undefined) : r;
+            return words.length ? this.exec({ ...nowNaming, label: `Type ${words.join('').toUpperCase()}` }, source, { text: words.join('') }, said, '', { by: chooser(first) }) : r;
           }
           const again = await interpreter.interpret(said, game.actions, game.state, { strict: true, justDid: first.action.label });
-          if (!superseded() && !this.refusal(source) && again.kind === 'act' && again.action.id !== first.action.id) r = await this.exec(again.action, source, undefined, undefined, '', { by: chooser(again), sure: again.p });
+          if (!superseded() && !this.refusal(source) && again.kind === 'act' && again.action.id !== first.action.id) r = await this.exec(again.action, source, undefined, said, '', { by: chooser(again), sure: again.p });
         }
         return r;
       }

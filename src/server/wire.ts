@@ -24,12 +24,12 @@ export interface LogEntry {
   chose?: string;
   /** how sure the model was (0 to 1); only when a model picked the action */
   sure?: number;
-  /** who picked it: the real Jev, the local stand-in, or nobody (fixed grammar, a click, a button, an agent's do_action) */
+  /** who picked it: the real Jev, the local stand-in, the player from a "did you mean" ('picked'), or nobody (fixed grammar, a click, a button, an agent's do_action) */
   by?: Chooser;
   /** when the entry stopped running */
   doneAt?: number;
 }
-export type Chooser = 'jev' | 'standin' | 'direct';
+export type Chooser = 'jev' | 'standin' | 'direct' | 'picked';
 
 export interface SessionInfo { mode: InputMode; autoAdvance: boolean; advancePaceMs: number; speed: number; jev: 'standin' | 'gateway'; answers: boolean }
 

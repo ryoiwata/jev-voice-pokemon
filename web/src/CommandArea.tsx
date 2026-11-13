@@ -105,8 +105,8 @@ export function CommandArea({ conn, tracker, mode, sendDelay }: { conn: Connecti
 
         {view.kind === 'refused' && (
           <div className="trace refused">
-            <div><small>{stripWords(view.entry).saidLabel}</small><strong>{stripWords(view.entry).said}</strong></div>
-            <div className="wide"><small>Not done</small><strong>{view.entry.text}</strong></div>
+            {view.entry.heard && <div><small>{stripWords(view.entry).saidLabel}</small><strong>{stripWords(view.entry).said}</strong></div>}
+            <div className={view.entry.heard ? 'wide' : 'all'}><small>{view.entry.heard ? 'Not done' : 'Something went wrong'}</small><strong>{view.entry.text}</strong></div>
           </div>
         )}
 

@@ -106,6 +106,7 @@ main { min-width: 0; }
 .trace > div + div { border-left: 2px solid var(--desk); }
 .trace > div + div::before { content: ""; position: absolute; left: -9px; top: 28px; width: 14px; height: 14px; background: var(--paper); border-top: 2px solid var(--desk); border-right: 2px solid var(--desk); transform: rotate(45deg); z-index: 1; }
 .trace .wide { grid-column: span 2; }
+.trace .all { grid-column: 1 / -1; }
 .trace small { display: block; font-size: 13px; color: var(--soft); margin-bottom: 2px; }
 .trace strong { font-size: 18px; font-weight: 600; display: block; overflow-wrap: anywhere; }
 .trace .sure { font-size: 13px; color: #1f7a4f; font-weight: 600; margin-left: 8px; white-space: nowrap; }
