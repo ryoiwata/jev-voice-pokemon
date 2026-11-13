@@ -31,6 +31,8 @@ export interface LogEntry {
   by?: Chooser;
   /** when the entry stopped running */
   doneAt?: number;
+  /** an answer that is complete (it streams in first) */
+  final?: boolean;
 }
 export type Chooser = 'jev' | 'standin' | 'direct' | 'picked';
 

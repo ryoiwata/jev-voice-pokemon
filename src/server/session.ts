@@ -429,6 +429,7 @@ export class Session extends EventEmitter {
         const entry = this.log(source, 'answer', '…', said);
         const say = source === 'human' ? this.speakAnswer(Number(entry.id)) : null;
         const message = await answerer.answer(said, game.state, (soFar) => { this.update(entry, 'answer', soFar); say?.push(soFar); });
+        entry.final = true;
         this.update(entry, 'answer', message);
         say?.finish(message);
         return { status: 'answer', message };

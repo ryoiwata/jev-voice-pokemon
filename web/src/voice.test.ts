@@ -8,7 +8,7 @@ function fakeCtx() {
   const param = () => ({ value: 0, setTargetAtTime: vi.fn() });
   const node = () => ({ connect: vi.fn(), disconnect: vi.fn(), gain: param(), frequency: param(), type: '', start: vi.fn(), stop: vi.fn() });
   const ctx = {
-    currentTime: 10, destination: {},
+    currentTime: 10, destination: {}, state: 'running',
     createBuffer: (_ch: number, n: number, rate: number) => ({ duration: n / rate, getChannelData: () => new Float32Array(n), copyToChannel: vi.fn() }),
     createBufferSource: () => {
       const s: any = { ...node(), buffer: null, onended: null, at: -1, stopped: false };
@@ -58,6 +58,12 @@ describe('VoicePlayer', () => {
     clock += SPEAKING_TAIL_MS - 1;
     expect(p.speaking).toBe(true);
     clock += 2;
+    expect(p.speaking).toBe(false);
+  });
+  it('ignores clips while the browser still holds sound back, so dictation is never blocked', () => {
+    (f.ctx as any).state = 'suspended';
+    p.push(clip(100));
+    expect(f.sources).toEqual([]);
     expect(p.speaking).toBe(false);
   });
   it('ignores clips when Voice is off', () => {

@@ -94,6 +94,7 @@ main { min-width: 0; }
 .field:focus-within { box-shadow: 0 0 0 4px rgba(74, 63, 176, .25); }
 .field input { flex: 1; min-width: 0; border: 0; background: none; outline: none; font-size: 19px; padding: 0; height: 56px; }
 .field input::placeholder { color: var(--soft); opacity: 1; }
+.field .held { flex: none; max-width: 45%; font-size: 13px; line-height: 1.3; color: var(--soft); }
 .ear { width: 12px; height: 12px; border-radius: 50%; background: var(--red); flex: none; animation: ear 1.6s ease-in-out infinite; }
 @keyframes ear { 50% { opacity: .25; } }
 .halt { background: var(--red); color: #fff; border: 2px solid var(--ink); border-radius: 14px; padding: 0 22px; font-weight: 800; font-size: 18px; display: flex; align-items: center; gap: 9px; flex: none; }

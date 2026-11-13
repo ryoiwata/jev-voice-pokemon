@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GameAudio } from './audio';
+import type { VoicePlayer } from './voice';
 import type { Connection } from './ws';
 
 type Panel = 'sound' | 'saves' | 'settings';
 
 /** The name, whether Jev is connected, and the three small panels: Sound, Saves, Settings. */
-export function TopBar({ conn, audio, sendDelay, setSendDelay }: { conn: Connection; audio: GameAudio; sendDelay: number; setSendDelay: (ms: number) => void }) {
+export function TopBar({ conn, audio, voice, sendDelay, setSendDelay }: { conn: Connection; audio: GameAudio; voice: VoicePlayer; sendDelay: number; setSendDelay: (ms: number) => void }) {
   const { session, send, saves } = conn;
   const [open, setOpen] = useState<Panel | null>(null);
   const [saveName, setSaveName] = useState('');
@@ -46,6 +47,11 @@ export function TopBar({ conn, audio, sendDelay, setSendDelay }: { conn: Connect
           <label>Volume
             <input type="range" min={0} max={1} step={0.05} value={audio.volume} onChange={(e) => { audio.setVolume(+e.target.value); tick(); }} />
           </label>
+          <label className="check"><input type="checkbox" checked={voice.enabled} onChange={(e) => { voice.setEnabled(e.target.checked); tick(); }} /> Read answers aloud</label>
+          <label>Voice volume
+            <input type="range" min={0} max={1} step={0.05} value={voice.volume} disabled={!voice.enabled} onChange={(e) => { voice.setVolume(+e.target.value); tick(); }} />
+          </label>
+          {session && !session.speech && <p className="note">This computer has no Mac voice, so answers use your browser's voice.</p>}
         </div>
       )}
 

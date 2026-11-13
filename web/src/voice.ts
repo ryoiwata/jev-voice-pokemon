@@ -11,7 +11,7 @@ export const SPEAKING_TAIL_MS = 1500;
 const LEAD = 0.05;
 
 /** The slice of AudioContext the player uses (so tests can stand in for it). */
-export type AudioContextLike = Pick<BaseAudioContext, 'currentTime' | 'destination' | 'createBuffer' | 'createBufferSource' | 'createGain' | 'createBiquadFilter' | 'createOscillator'>;
+export type AudioContextLike = Pick<BaseAudioContext, 'state' | 'currentTime' | 'destination' | 'createBuffer' | 'createBufferSource' | 'createGain' | 'createBiquadFilter' | 'createOscillator'>;
 
 /** Samples as -1…1, each `hold`-th one held over the next ones (a lower-quality, crunchier sound). */
 export function crush(pcm: Int16Array, hold: number): Float32Array<ArrayBuffer> {
@@ -70,7 +70,8 @@ export class VoicePlayer {
 
   /** One spoken sentence: mono 16-bit at VOICE_RATE. */
   push(pcm: Int16Array) {
-    if (!this.enabled || !pcm.length) return;
+    // until the first click or key press the browser holds sound back, and a clip would never end
+    if (!this.enabled || !pcm.length || this.ctx.state !== 'running') return;
     const buf = this.ctx.createBuffer(1, pcm.length, VOICE_RATE);
     buf.copyToChannel(crush(pcm, VOICE_FX.hold), 0);
     const src = this.ctx.createBufferSource();

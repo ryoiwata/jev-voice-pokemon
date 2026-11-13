@@ -96,7 +96,14 @@ describe('Session: commands', () => {
     expect(game.ran).toEqual([]);
     expect(answerer.answer).toHaveBeenCalledOnce();
     expect(r).toEqual({ status: 'answer', message: 'Water beats Rock.' });
-    expect(last()).toMatchObject({ status: 'answer', text: 'Water beats Rock.' });
+    expect(last()).toMatchObject({ status: 'answer', text: 'Water beats Rock.', final: true });
+  });
+  it('marks an answer final only once it is complete', async () => {
+    const seen: (boolean | undefined)[] = [];
+    answerer.answer.mockImplementation(async (_q, _s, d) => { d?.('Water'); return 'Water beats Rock.'; });
+    s.on('log', (e: LogEntry) => seen.push(e.final));
+    await s.handleText("what's good against rock types?", 'human');
+    expect(seen).toEqual([undefined, undefined, true]);
   });
 
   it('declines what cannot be done from here', async () => {

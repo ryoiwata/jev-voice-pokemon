@@ -59,4 +59,30 @@ describe('AutoSender', () => {
     a.update('stop', 800, false);
     vi.advanceTimersByTime(5000); expect(send).not.toHaveBeenCalled();
   });
+
+  describe('while the voice is talking', () => {
+    const stop = (t: string) => /stop/.test(t);
+    it('throws away dictation that lands while the voice is talking', () => {
+      const sent: string[] = [], dropped: string[] = [];
+      const a = new AutoSender((t) => sent.push(t), stop, () => true, (t) => dropped.push(t));
+      a.update('go north', 300, true); vi.advanceTimersByTime(300);
+      expect(sent).toEqual([]);
+      expect(dropped).toEqual(['go north']);
+    });
+    it('still sends a dictated stop at once', () => {
+      const sent: string[] = [];
+      const a = new AutoSender((t) => sent.push(t), stop, () => true, () => {});
+      a.update('stop', 300, true);
+      expect(sent).toEqual(['stop']);
+    });
+    it('decides when the delay is up, so text from the last moments of the voice is dropped and later text is sent', () => {
+      let talking = true; const sent: string[] = [], dropped: string[] = [];
+      const a = new AutoSender((t) => sent.push(t), stop, () => talking, (t) => dropped.push(t));
+      a.update('go north', 300, true); vi.advanceTimersByTime(300);
+      talking = false;
+      a.update('go south', 300, true); vi.advanceTimersByTime(300);
+      expect(dropped).toEqual(['go north']);
+      expect(sent).toEqual(['go south']);
+    });
+  });
 });

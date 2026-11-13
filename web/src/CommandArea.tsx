@@ -61,7 +61,7 @@ function Earlier({ entries }: { entries: LogEntry[] }) {
 }
 
 /** The switch, the box, Stop, and what is happening right now. */
-export function CommandArea({ conn, tracker, mode, sendDelay }: { conn: Connection; tracker: PressTracker; mode: InputMode; sendDelay: number }) {
+export function CommandArea({ conn, tracker, mode, sendDelay, voiceTalking }: { conn: Connection; tracker: PressTracker; mode: InputMode; sendDelay: number; voiceTalking: () => boolean }) {
   const { send, log } = conn;
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 500); return () => clearInterval(t); }, []);
@@ -81,7 +81,7 @@ export function CommandArea({ conn, tracker, mode, sendDelay }: { conn: Connecti
               title={m === 'voice' ? 'Dictated commands send themselves' : 'Type a command and press Enter'}>{m === 'voice' ? 'Voice' : 'Text'}</button>
           ))}
         </div>
-        <CommandBar mode={mode} delayMs={sendDelay} placeholder={placeholder} onSend={(text) => send({ type: 'text', text })} />
+        <CommandBar mode={mode} delayMs={sendDelay} placeholder={placeholder} onSend={(text) => send({ type: 'text', text })} voiceTalking={voiceTalking} />
         <button type="button" className="halt" onClick={() => send({ type: 'stop' })}>Stop <kbd>Esc</kbd></button>
       </div>
 

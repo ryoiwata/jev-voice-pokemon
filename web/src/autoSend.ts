@@ -7,8 +7,17 @@ export class AutoSender {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private armedFor: string | null = null;
 
-  /** `urgent` picks out text that must not wait for the delay (a spoken "stop"). */
-  constructor(private send: (text: string) => void, private urgent: (text: string) => boolean = () => false) {}
+  /**
+   * `urgent` picks out text that must not wait for the delay (a spoken "stop"). While `hold` is true
+   * (the page's own voice is talking, and dictation may have heard it), text is handed to `discard`
+   * instead of being sent. Urgent text is always sent.
+   */
+  constructor(
+    private send: (text: string) => void,
+    private urgent: (text: string) => boolean = () => false,
+    private hold: () => boolean = () => false,
+    private discard: (text: string) => void = () => {},
+  ) {}
 
   /** Call with the box's current text whenever it may have changed. */
   update(value: string, delayMs: number, enabled: boolean) {
@@ -18,7 +27,7 @@ export class AutoSender {
     this.cancel();
     if (this.urgent(text)) { this.send(text); return; }
     this.armedFor = text;
-    this.timer = setTimeout(() => { this.timer = null; this.armedFor = null; this.send(text); }, delayMs);
+    this.timer = setTimeout(() => { this.timer = null; this.armedFor = null; (this.hold() ? this.discard : this.send)(text); }, delayMs);
   }
 
   cancel() {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Button } from '../../src/emu/emulator';
 import { useConnection } from './ws';
 import { Console } from './Console';
@@ -6,6 +6,8 @@ import { CommandArea } from './CommandArea';
 import { TopBar } from './TopBar';
 import { Sidebar } from './Sidebar';
 import { GameAudio } from './audio';
+import { VoicePlayer } from './voice';
+import { isStop } from '../../src/interpret/fastpath';
 import { PressTracker } from './pressed';
 import { DEFAULT_KEYMAP, buttonFor, keysPlayGame } from './keys';
 
@@ -16,6 +18,10 @@ export function App() {
   const { state, send } = conn;
   const tracker = useMemo(() => new PressTracker(), []);
   const audio = useMemo(() => new GameAudio(), []);
+  const voice = useMemo(() => new VoicePlayer(audio.ctx, (on) => audio.duck(on)), [audio]);
+  const [, redraw] = useState(0);
+  const speechRef = useRef(true);
+  speechRef.current = conn.session?.speech ?? true;
   const [sendDelay, setSendDelayState] = useState(() => stored('sendDelay', 800));
   const setSendDelay = (ms: number) => { setSendDelayState(ms); try { localStorage.setItem('sendDelay', String(ms)); } catch { /* fine without */ } };
   const mode = conn.session?.mode ?? 'voice';
@@ -28,12 +34,30 @@ export function App() {
     return () => { conn.onAudio.current = null; window.removeEventListener('pointerdown', wake); window.removeEventListener('keydown', wake); };
   }, [audio, conn.onAudio]);
 
-  // each new command starts a fresh trail of presses; done as the entry arrives so no press is lost to a late redraw
+  // Spoken answers. The server sends the Mac voice's clips; any stop the page sends silences it here
+  // at once, without waiting for the server. The page redraws when the voice starts or ends (the guard).
+  useEffect(() => {
+    voice.onChange = () => redraw((n) => n + 1);
+    conn.onVoice.current = (_id, pcm) => voice.push(pcm);
+    conn.onHush.current = () => voice.stop();
+    conn.onSend.current = (m) => { if (m.type === 'stop' || (m.type === 'text' && isStop(m.text))) voice.stop(); };
+    return () => { voice.onChange = null; conn.onVoice.current = null; conn.onHush.current = null; conn.onSend.current = null; };
+  }, [voice, conn.onVoice, conn.onHush, conn.onSend]);
+
+  // Each new command starts a fresh trail of presses; done as the entry arrives so no press is lost to a late redraw.
+  // Without the Mac voice, the player's finished answers are read with the browser's voice: only ones
+  // seen unfinished here first, so answers replayed when the page (re)connects are not read again.
   useEffect(() => {
     let last = '';
-    conn.onLog.current = (entry) => { if (entry.chose && entry.id !== last) { last = entry.id; tracker.clearTrail(); } };
+    const open = new Set<string>();
+    conn.onLog.current = (entry) => {
+      if (entry.chose && entry.id !== last) { last = entry.id; tracker.clearTrail(); }
+      if (entry.status !== 'answer' || entry.source !== 'human') return;
+      if (!entry.final) open.add(entry.id);
+      else if (open.delete(entry.id) && !speechRef.current) voice.sayFallback(entry.text);
+    };
     return () => { conn.onLog.current = null; };
-  }, [conn.onLog, tracker]);
+  }, [conn.onLog, tracker, voice]);
 
   // Esc always stops. The other keys play the game unless the player is typing or a page control has the focus.
   useEffect(() => {
@@ -58,13 +82,13 @@ export function App() {
   return (
     <div className="page">
       <main>
-        <TopBar conn={conn} audio={audio} sendDelay={sendDelay} setSendDelay={setSendDelay} />
+        <TopBar conn={conn} audio={audio} voice={voice} sendDelay={sendDelay} setSendDelay={setSendDelay} />
         <Console
           conn={conn} tracker={tracker}
           down={(b) => send({ type: 'down', button: b })} up={(b) => send({ type: 'up', button: b })}
           onTile={(col, row) => send({ type: 'click', col, row })}
         />
-        <CommandArea conn={conn} tracker={tracker} mode={mode} sendDelay={sendDelay} />
+        <CommandArea conn={conn} tracker={tracker} mode={mode} sendDelay={sendDelay} voiceTalking={() => voice.speaking} />
       </main>
       {state && <Sidebar state={state} />}
     </div>
