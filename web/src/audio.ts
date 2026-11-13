@@ -1,7 +1,9 @@
 import { AUDIO_RATE } from '../../src/server/wire';
 
 const LEAD = 0.05;      // seconds of safety when starting after silence
-const MAX_AHEAD = 0.4;  // never queue more than this (keeps sound close to the picture)
+const MAX_AHEAD = 0.4;
+/** How loud the game stays while a spoken answer plays. */
+export const DUCK_LEVEL = 0.3;  // never queue more than this (keeps sound close to the picture)
 
 /** When the next chunk should start playing, or null to drop it because too much is queued already. */
 export function nextStart(now: number, lastEnd: number): number | null {
@@ -15,8 +17,10 @@ const store = (k: string, v: number) => { try { localStorage.setItem(k, String(v
 
 /** Plays the game's sound as it arrives from the server. */
 export class GameAudio {
-  private ctx: AudioContext;
+  readonly ctx: AudioContext;
   private gain: GainNode;
+  /** dips the game while a spoken answer plays */
+  private dip: GainNode;
   private lastEnd = 0;
   volume = load('volume', 0.6);
   muted = load('muted', 0) === 1;
@@ -24,7 +28,9 @@ export class GameAudio {
   constructor(ctx?: AudioContext) {
     this.ctx = ctx ?? new AudioContext({ latencyHint: 'interactive' });
     this.gain = this.ctx.createGain();
-    this.gain.connect(this.ctx.destination);
+    this.dip = this.ctx.createGain();
+    this.gain.connect(this.dip);
+    this.dip.connect(this.ctx.destination);
     this.apply();
   }
 
@@ -35,6 +41,9 @@ export class GameAudio {
   private apply() { this.gain.gain.value = this.muted ? 0 : this.volume; }
   setVolume(v: number) { this.volume = Math.max(0, Math.min(1, v)); store('volume', this.volume); this.apply(); }
   setMuted(m: boolean) { this.muted = m; store('muted', m ? 1 : 0); this.apply(); }
+
+  /** Lower the game to DUCK_LEVEL while the voice talks; back to full over about 300 ms after. */
+  duck(on: boolean) { this.dip.gain.setTargetAtTime(on ? DUCK_LEVEL : 1, this.ctx.currentTime, 0.1); }
 
   /** One chunk of interleaved stereo 16-bit samples. */
   push(pcm: Int16Array) {
