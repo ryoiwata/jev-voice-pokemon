@@ -5,6 +5,8 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
 import { GameClient } from './game.js';
+import { Rom } from '../game/rom.js';
+import { Pics } from '../game/pics.js';
 import { parseClientMsg, TAG_FRAME, TAG_AUDIO, type LogEntry, type ServerMsg } from './wire.js';
 import { Session } from './session.js';
 import { Answerer } from '../answer/answerer.js';
@@ -35,6 +37,7 @@ export async function startServer(opts: ServerOpts): Promise<{ game: GameClient;
   const game = await GameClient.start({ romPath: process.env.ROM_PATH ?? 'roms/red.gb', resume, autosave: opts.autosave });
   game.on('log', (kind: string, msg: string) => { if (kind === 'error') console.error(`[game] ${msg}`); });
 
+  const pics = new Pics(new Rom(fs.readFileSync(process.env.ROM_PATH ?? 'roms/red.gb')));
   const jev = new Jev({ logFile: opts.autosave === false ? (process.env.JEV_LOG_FILE || null) : undefined });
   const answerer = new Answerer();
   const session = new Session({ game, interpreter: new Interpreter(jev, new StandinJev()), answerer, jev: jev.backend.name === 'gateway' ? 'gateway' : 'standin' });
@@ -57,6 +60,16 @@ export async function startServer(opts: ServerOpts): Promise<{ game: GameClient;
     const url = (req.url ?? '/').split('?')[0];
     if (url === '/mcp') {
       handleMcp(req, res, { session, game }).catch((e) => { console.error(`[mcp] ${(e as Error).message}`); if (!res.headersSent) res.writeHead(500); res.end(); });
+      return;
+    }
+    if (url.startsWith('/pic/')) {
+      // pictures decoded from the player's ROM; names are looked up in a table, never used as paths
+      let png: Buffer | null = null;
+      const m = url.match(/^\/pic\/mon\/([^/]+)\.png$/);
+      try { png = url === '/pic/trainer.png' ? pics.trainerPng() : m ? pics.monPng(decodeURIComponent(m[1])) : null; } catch { png = null; }
+      if (!png) { res.writeHead(404, { 'content-type': 'text/plain' }); res.end('Not found'); return; }
+      res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'max-age=86400' });
+      res.end(png);
       return;
     }
     const file = path.join(WEB, path.normalize(url === '/' ? 'index.html' : url));
