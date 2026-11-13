@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { fastPath } from '../../src/interpret/fastpath.js';
+import { isStop, fastPath } from '../../src/interpret/fastpath.js';
 
 const has = (id: string) => ['steps:left', 'steps:up', 'text:next', 'name'].includes(id);
 
@@ -62,5 +62,15 @@ describe('fastPath: movement however it is phrased', () => {
   it('does not mistake other sentences with a direction word for movement', () => {
     expect(fastPath('talk to the youngster to the north', has, false)).toBeNull();
     expect(fastPath('use the item on the right', has, false)).toBeNull();
+  });
+
+  it('hears stop at the end of anything, so it works while another command is still in the box', () => {
+    for (const t of ['walk to the door stop', 'go north and talk to the man in the green hat. Stop!', 'use ember on the STOP', 'stop', 'Wait, stop.', 'halt'])
+      expect(isStop(t), t).toBe(true);
+    expect(fastPath('walk to the door and then go all the way north stop', has, false)).toEqual({ kind: 'stop' });
+  });
+  it('does not hear stop in a long sentence that only mentions it, or in other words', () => {
+    for (const t of ['what happens if I stop the evolution of my pokemon', 'nonstop', 'stopwatch', 'walk left', ''])
+      expect(isStop(t), t).toBe(false);
   });
 });

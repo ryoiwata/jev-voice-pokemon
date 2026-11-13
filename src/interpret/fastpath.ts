@@ -18,6 +18,20 @@ const ORDINAL: Record<string, number> = { one: 0, '1': 0, first: 0, two: 1, '2':
  * naming, and number answers to a pending "did you mean". Anything else is null and goes to the interpreter.
  * `has` says whether an action id is on offer right now; `pending` whether a "did you mean" is waiting.
  */
+/**
+ * Whether these words mean "stop". Stop must be heard however it comes out of dictation: "stop it",
+ * "please stop", "wait, stop". Any short utterance with the word in it counts, and so does anything
+ * that ends with it, because dictation may add "stop" to a command that is still sitting in the box.
+ * A long sentence that merely mentions stopping does not. The page uses this too, to send a stop at once.
+ */
+export function isStop(text: string): boolean {
+  const words = text.toLowerCase().replace(/[^a-z' ]/g, ' ').split(' ').filter(Boolean);
+  if (!words.length) return false;
+  if (words.length === 1 && words[0] === 'cancel') return true;
+  const stop = (w: string) => w === 'stop' || w === 'halt';
+  return stop(words[words.length - 1]) || (words.length <= 5 && words.some(stop));
+}
+
 export function fastPath(text: string, has: (id: string) => boolean, pending: boolean): Fast | null {
   const raw = text.trim().replace(/[.!?,]+$/, '').trim();
   const t = raw.toLowerCase().replace(/\s+/g, ' ');
@@ -26,8 +40,7 @@ export function fastPath(text: string, has: (id: string) => boolean, pending: bo
 
   // Stop must be heard however it comes out of dictation: "stop it", "please stop", "stop stop", "wait stop".
   // Any short utterance with the word in it counts; a long sentence that merely contains it does not.
-  const words = t.replace(/[^a-z' ]/g, ' ').split(' ').filter(Boolean);
-  if (t === 'cancel' || (words.length <= 5 && words.some((w) => w === 'stop' || w === 'halt'))) return { kind: 'stop' };
+  if (isStop(text)) return { kind: 'stop' };
   if ((m = t.match(/^(voice|text) mode$/))) return { kind: 'set', key: 'mode', value: m[1] as InputMode };
   if ((m = t.match(/^auto[- ]?advance (on|off)$/))) return { kind: 'set', key: 'autoAdvance', value: m[1] === 'on' };
   if (t === 'save') return { kind: 'save' };

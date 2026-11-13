@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { InputMode } from '../../src/server/wire';
 import { AutoSender } from './autoSend';
+import { isStop } from '../../src/interpret/fastpath';
 
 /** Where dictated or typed commands land. In Voice mode it keeps focus and sends by itself. */
 export function CommandBar({ mode, delayMs, placeholder, onSend }: { mode: InputMode; delayMs: number; placeholder: string; onSend: (text: string) => void }) {
@@ -9,7 +10,8 @@ export function CommandBar({ mode, delayMs, placeholder, onSend }: { mode: Input
   const hands = mode === 'voice';
   const submit = (text: string) => { if (text.trim()) onSend(text.trim()); setValue(''); };
   const submitRef = useRef(submit); submitRef.current = submit;
-  const auto = useMemo(() => new AutoSender((t) => submitRef.current(t)), []);
+  // a dictated "stop" goes out the moment it lands in the box, even on the end of a command still waiting to be sent
+  const auto = useMemo(() => new AutoSender((t) => submitRef.current(t), isStop), []);
 
   useEffect(() => { auto.update(value, delayMs, hands); }, [auto, value, delayMs, hands]);
   useEffect(() => () => auto.cancel(), [auto]);

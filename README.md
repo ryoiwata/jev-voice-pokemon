@@ -87,7 +87,7 @@ These always work, in either mode:
 
 Plain dialogue continues by itself at a readable pace and stops whenever the game asks you to choose. Full-screen pages (a Pokémon's stats, a Pokédex entry, the map) stay up until you say "next". You can turn auto-continue off or change the pace in Settings.
 
-"Stop" is heard however it comes out: "stop", "stop it", "please stop", "wait, stop". Saying it, a newer command, or any button press also cancels a command that is still being worked out.
+"Stop" is heard however it comes out: "stop", "stop it", "please stop", "wait, stop". In Voice mode it is sent the moment it lands in the command box, without the usual pause, and it works at any time: while the character is walking, while Jev is still working out a command, and even when it arrives on the end of another command that had not been sent yet ("walk to the door… stop" just stops). A newer command or any button press also cancels a command that is still being worked out.
 
 If the app is unsure which thing you meant, it shows up to three numbered guesses under the command box; say "one", "two" or "three", or click one. Hard-to-undo actions (tossing an item, releasing a Pokémon, a Master Ball, overwriting a move) need a closer match before they run unasked.
 
@@ -101,7 +101,7 @@ The app never answers the game's own questions for you. If "toss the Potion" lea
 2. Hold Wispr Flow's dictation key, say the command, release.
 3. The text lands in the box and sends itself. No Enter, no click.
 
-Wispr Flow delivers the text when dictation ends, so a spoken "stop" takes effect when you release the key. `Esc` and the Stop button are instant.
+Wispr Flow delivers the text when dictation ends, so a spoken "stop" takes effect when you release the key; the app then acts on it at once. `Esc` and the Stop button are instant.
 
 Adding Pokémon and move names to Wispr Flow's dictionary improves how they are spelled. Small misspellings are tolerated either way.
 
