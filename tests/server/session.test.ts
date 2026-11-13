@@ -155,6 +155,51 @@ describe('Session: one sentence, two steps', () => {
   });
 });
 
+describe('Session: what the log records about a choice', () => {
+  it('a stand-in choice records what was chosen, how surely, and by whom', async () => {
+    await s.handleText('walk to the poke ball', 'human');
+    expect(last()).toMatchObject({ heard: 'walk to the poke ball', chose: 'Examine the Poké Ball', by: 'standin', status: 'done' });
+    expect(last().sure).toBeGreaterThan(0.5); expect(last().sure).toBeLessThanOrEqual(1);
+    expect(typeof last().doneAt).toBe('number');
+  });
+  it('a choice by the real model is marked as Jev’s', async () => {
+    const inner = new StandinJev();
+    const real: JevBackend = { name: 'gateway', evaluate: (req) => inner.evaluate(req) };
+    const sess = new Session({ game, interpreter: new Interpreter(new Jev({ backend: real, logFile: null }), inner), answerer, jev: 'gateway' });
+    const seen: LogEntry[] = [];
+    sess.on('log', (e: LogEntry) => seen.push({ ...e }));
+    await sess.handleText('walk to the poke ball', 'human');
+    expect(seen.at(-1)).toMatchObject({ chose: 'Examine the Poké Ball', by: 'jev' });
+    expect(seen.at(-1)!.sure).toBeGreaterThan(0.5);
+  });
+  it('a fixed-grammar command is direct and has no percentage', async () => {
+    await s.handleText('press a', 'human');
+    expect(last()).toMatchObject({ by: 'direct', chose: 'Press A' });
+    expect(last().sure).toBeUndefined();
+  });
+  it('a click, an agent’s action and a pick from "did you mean" are direct', async () => {
+    await s.click(3, 3);
+    expect(last()).toMatchObject({ by: 'direct' }); expect(last().chose).toBeTruthy();
+    await s.runAction('npc:4', 'agent');
+    expect(last()).toMatchObject({ by: 'direct', chose: 'Examine the Poké Ball', source: 'agent' });
+    await s.handleText('talk to the youngster', 'human');
+    expect(last().status).toBe('asking');
+    await s.handleText('two', 'human');
+    expect(last()).toMatchObject({ by: 'direct', chose: 'Talk to Youngster to the east' });
+  });
+  it('the chosen label carries no step count or result', async () => {
+    await s.handleText('walk to the poke ball', 'human');
+    expect(last().chose).not.toMatch(/steps|→/);
+    expect(last().text).toMatch(/6 steps/);
+  });
+  it('an entry that is still running has no finish time', async () => {
+    game.script = never;
+    void s.runAction('npc:4', 'human');
+    await new Promise((r) => setTimeout(r, 10));
+    expect(last().status).toBe('running'); expect(last().doneAt).toBeUndefined();
+  });
+});
+
 describe('Session: who has the controls', () => {
   it('lets an agent act in any mode when the player is idle', async () => {
     expect(s.mode).toBe('voice');

@@ -19,7 +19,7 @@ export function stepCount(said: string): number {
   return 1;
 }
 import { Slot, type Control } from '../worker/control.js';
-import type { InputMode, LogEntry, SessionInfo, SetKey, Source } from './wire.js';
+import type { Chooser, InputMode, LogEntry, SessionInfo, SetKey, Source } from './wire.js';
 
 /** The part of GameClient the session uses. */
 export interface GameLike {
@@ -45,6 +45,9 @@ export type Outcome = ActionResult | { status: 'answer' | 'asking' | 'refused' |
 
 const JUST_STOPPED: Outcome = { status: 'refused', message: 'The player pressed stop.' };
 const BUSY: Outcome = { status: 'refused', message: 'The player is doing something. Wait for it to finish.' };
+/** Who picked an action, and how surely when it was a model. */
+interface Why { by: Chooser; sure?: number }
+const DIRECT: Why = { by: 'direct' };
 const CANCELLED: Outcome = { status: 'stopped', message: 'Cancelled.' };
 const QUICK_SAVE = 'quick';
 
@@ -80,13 +83,14 @@ export class Session extends EventEmitter {
 
   // ---- log
 
-  private log(source: Source, status: LogEntry['status'], text: string, heard?: string, choices?: LogEntry['choices']): LogEntry {
-    const entry: LogEntry = { id: String(this.nextLog++), at: Date.now(), source, status, text, ...(heard ? { heard } : {}), ...(choices ? { choices } : {}) };
+  private log(source: Source, status: LogEntry['status'], text: string, heard?: string, choices?: LogEntry['choices'], extra: Partial<LogEntry> = {}): LogEntry {
+    const entry: LogEntry = { id: String(this.nextLog++), at: Date.now(), source, status, text, ...(heard ? { heard } : {}), ...(choices ? { choices } : {}), ...extra };
     this.emit('log', entry);
     return entry;
   }
   private update(entry: LogEntry, status: LogEntry['status'], text: string) {
     entry.status = status; entry.text = text;
+    if (status !== 'running' && entry.doneAt === undefined) entry.doneAt = this.now();
     this.emit('log', entry);
   }
 
@@ -153,11 +157,11 @@ export class Session extends EventEmitter {
 
   // ---- doing things
 
-  private async exec(action: { id: string; label: string; distance?: number }, source: Source, arg: unknown, heard: string | undefined, note = ''): Promise<ActionResult> {
+  private async exec(action: { id: string; label: string; distance?: number }, source: Source, arg: unknown, heard: string | undefined, note = '', why: Why = DIRECT): Promise<ActionResult> {
     const { game } = this.deps;
     this.takeOver(source);
     const steps = action.distance ? ` (${action.distance} ${action.distance === 1 ? 'step' : 'steps'})` : '';
-    const entry = this.log(source, 'running', `${action.label}${steps}${note}`, heard);
+    const entry = this.log(source, 'running', `${action.label}${steps}${note}`, heard, undefined, { chose: action.label, by: why.by, ...(why.sure !== undefined ? { sure: why.sure } : {}) });
     const mine = { source, takenOver: false };
     this.current = mine;
     let r: ActionResult;
@@ -302,6 +306,7 @@ export class Session extends EventEmitter {
     const stillNo = this.refusal(source);
     if (stillNo) return stillNo;
     const note = first.fellBack ? ' (Jev unavailable, used the stand-in)' : '';
+    const chooser = (i: { backend: string; fellBack: boolean }): Chooser => (i.backend === 'gateway' && !i.fellBack ? 'jev' : 'standin');
 
     // A naming screen has one thing to do: type a name. The model can choose that but cannot write the
     // name, so unless the player asked a question, the name is lifted from their own words.
@@ -313,7 +318,7 @@ export class Session extends EventEmitter {
         this.log(source, 'failed', message, said);
         return { status: 'failed', message };
       }
-      return this.exec({ ...naming, label: `Type ${words.join('').toUpperCase()}` }, source, { text: words.join('') }, said, note);
+      return this.exec({ ...naming, label: `Type ${words.join('').toUpperCase()}` }, source, { text: words.join('') }, said, note, { by: chooser(first) });
     }
     switch (first.kind) {
       case 'nothing': {
@@ -345,7 +350,7 @@ export class Session extends EventEmitter {
       }
       case 'act': {
         const arg = first.action.kind === 'steps' ? stepCount(said) : undefined;
-        let r = await this.exec(first.action, source, arg, said, note);
+        let r = await this.exec(first.action, source, arg, said, note, { by: chooser(first), sure: first.p });
         // Opening a menu (FIGHT, the bag, the START menu) is the whole command: what to pick inside is the player's call.
         const opener = first.action.id.startsWith('battle:') || first.action.id === 'start' || first.action.id.startsWith('startmenu:');
         if (r.status === 'prompt' && !opener) {
@@ -359,7 +364,7 @@ export class Session extends EventEmitter {
             return words.length ? this.exec({ ...nowNaming, label: `Type ${words.join('').toUpperCase()}` }, source, { text: words.join('') }, undefined) : r;
           }
           const again = await interpreter.interpret(said, game.actions, game.state, { strict: true, justDid: first.action.label });
-          if (!superseded() && !this.refusal(source) && again.kind === 'act' && again.action.id !== first.action.id) r = await this.exec(again.action, source, undefined, undefined);
+          if (!superseded() && !this.refusal(source) && again.kind === 'act' && again.action.id !== first.action.id) r = await this.exec(again.action, source, undefined, undefined, '', { by: chooser(again), sure: again.p });
         }
         return r;
       }
