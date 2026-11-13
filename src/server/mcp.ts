@@ -17,10 +17,10 @@ const outcome = (o: Outcome): Result => (o.status === 'refused' ? error(o.messag
 const button = z.enum(BUTTONS as [string, ...string[]]);
 const saveName = z.string().regex(SAVE_NAME, 'Use letters, digits, dashes and underscores only (up to 40).');
 
-/** The tools an outside AI agent gets. Reading always works; acting only while the player has the mode switch on Agent. */
+/** The tools an outside AI agent gets. Reading always works. Acting is refused while the player is doing something or has just pressed stop. */
 function build({ session, game }: Deps): McpServer {
   const mcp = new McpServer({ name: 'jev-voice-pokemon', version: '1.0.0' });
-  const A = 'Only works while the player has the input mode set to Agent.';
+  const A = 'Refused while the player is doing something or has just pressed stop.';
 
   mcp.registerTool('get_state', { description: 'The game right now: location, party, bag, battle, text on screen, what is running, and the input mode.' },
     async () => json({ ...game.state, inputMode: session.mode }));

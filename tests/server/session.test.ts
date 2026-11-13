@@ -156,33 +156,42 @@ describe('Session: one sentence, two steps', () => {
 });
 
 describe('Session: who has the controls', () => {
-  it('refuses agent actions outside agent mode but lets agents stop', async () => {
-    expect(await s.runAction('npc:4', 'agent')).toEqual({ status: 'refused', message: 'The player has the controls.' });
-    expect(await s.handleText('walk to the poke ball', 'agent')).toEqual({ status: 'refused', message: 'The player has the controls.' });
-    expect(game.ran).toEqual([]);
-    game.script = never;
-    void s.runAction('npc:4', 'human');
+  it('lets an agent act in any mode when the player is idle', async () => {
+    expect(s.mode).toBe('voice');
+    expect((await s.runAction('npc:4', 'agent')).status).toBe('done');
+    expect((await s.handleText('walk to the poke ball', 'agent')).status).toBe('done');
+    s.set('mode', 'text');
+    expect((await s.press(['A'], 'agent')).status).not.toBe('refused');
+  });
+
+  it('holds agents off for 5 s after the player stops, then lets them act', async () => {
+    let t = 1000;
+    const sess = new Session({ game, interpreter: new Interpreter(new Jev({ backend: new StandinJev(), logFile: null }), new StandinJev()), answerer, jev: 'standin', now: () => t });
+    sess.stop('human');
+    expect(await sess.runAction('npc:4', 'agent')).toEqual({ status: 'refused', message: 'The player pressed stop.' });
+    expect(await sess.handleText('walk to the poke ball', 'agent')).toEqual({ status: 'refused', message: 'The player pressed stop.' });
+    t += 4999;
+    expect((await sess.press(['A'], 'agent')).status).toBe('refused');
+    t += 1;
+    expect((await sess.runAction('npc:4', 'agent')).status).toBe('done');
+  });
+
+  it('a spoken stop holds agents off too', async () => {
+    await s.handleText('stop', 'human');
+    expect((await s.runAction('npc:4', 'agent')).status).toBe('refused');
+  });
+
+  it('an agent’s own stop works and does not start the hold-off', async () => {
+    game.script = (id) => (id === 'npc:2' ? never() : { status: 'done', message: 'Done.' });
+    void s.runAction('npc:2', 'human');
     await new Promise((r) => setTimeout(r, 10));
     s.stop('agent');
     expect(game.stop).toHaveBeenCalled();
-  });
-
-  it('lets agents act in agent mode', async () => {
-    s.set('mode', 'agent');
+    await new Promise((r) => setTimeout(r, 10));
     expect((await s.runAction('npc:4', 'agent')).status).toBe('done');
-    expect((await s.handleText('walk to the poke ball', 'agent')).status).toBe('done');
-  });
-
-  it('in agent mode, human text other than stop or a mode switch is refused', async () => {
-    s.set('mode', 'agent');
-    expect(await s.handleText('walk to the poke ball', 'human')).toEqual({ status: 'refused', message: 'Agent mode: say "stop" or "voice mode" to take over.' });
-    expect(game.ran).toEqual([]);
-    await s.handleText('voice mode', 'human');
-    expect(s.mode).toBe('voice');
   });
 
   it('a human action interrupts an agent action', async () => {
-    s.set('mode', 'agent');
     game.script = (id) => (id === 'npc:4' ? never() : { status: 'done', message: 'Done.' });
     const agent = s.runAction('npc:4', 'agent');
     await new Promise((r) => setTimeout(r, 10));
@@ -205,9 +214,11 @@ describe('Session: who has the controls', () => {
   it('switches modes by voice and tells listeners', async () => {
     const infos: string[] = [];
     s.on('session', (i) => infos.push(i.mode));
-    await s.handleText('agent mode', 'human');
+    await s.handleText('text mode', 'human');
     await s.handleText('voice mode', 'human');
-    expect(infos).toEqual(['agent', 'voice']);
+    expect(infos).toEqual(['text', 'voice']);
+    await s.handleText('agent mode', 'human');
+    expect(s.mode).toBe('voice');
   });
 
   it('applies settings to the game thread', () => {
@@ -261,10 +272,9 @@ describe('Session: while a command is still being worked out', () => {
 
   it('an agent’s command does not run if the player took the controls back meanwhile', async () => {
     const { g, sess } = slowSession(120);
-    sess.set('mode', 'agent');
     const p = sess.handleText('walk to the poke ball', 'agent');
     await sleep(30);
-    sess.set('mode', 'voice');
+    sess.rawButton('tap', 'B');
     expect((await p).status).not.toBe('done');
     await sleep(150);
     expect(g.ran).toEqual([]);
@@ -294,7 +304,6 @@ describe('Session: the player always wins', () => {
   });
 
   it('an agent cannot replace an action the player started', async () => {
-    s.set('mode', 'agent');
     game.script = (id) => (id === 'npc:2' ? never() : { status: 'done', message: 'Done.' });
     const mine = s.runAction('npc:2', 'human');
     await sleep(20);
@@ -302,11 +311,11 @@ describe('Session: the player always wins', () => {
     expect(await s.press(['A'], 'agent')).toMatchObject({ status: 'refused' });
     expect(game.ran.map((x) => x.id)).toEqual(['npc:2']);
     s.stop('human'); await mine;
-    expect((await s.runAction('npc:4', 'agent')).status).toBe('done');
+    // the player's stop holds agents off for a moment (see the hold-off tests above)
+    expect(await s.runAction('npc:4', 'agent')).toEqual({ status: 'refused', message: 'The player pressed stop.' });
   });
 
   it('an agent cannot act while the player is holding a button', async () => {
-    s.set('mode', 'agent');
     s.rawButton('down', 'LEFT');
     expect((await s.runAction('npc:4', 'agent')).status).toBe('refused');
     s.rawButton('up', 'LEFT');
@@ -327,11 +336,6 @@ describe('Session: the player always wins', () => {
     expect(last().status).toBe('failed');
   });
 
-  it('text in agent mode that is refused is still shown in the log', async () => {
-    s.set('mode', 'agent');
-    await s.handleText('walk to the poke ball', 'human');
-    expect(last()).toMatchObject({ status: 'failed', heard: 'walk to the poke ball' });
-  });
 });
 
 describe('Session: naming screens', () => {

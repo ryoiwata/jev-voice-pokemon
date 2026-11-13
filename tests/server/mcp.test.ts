@@ -33,16 +33,7 @@ describe.skipIf(!hasFixture('fx-bedroom'))('MCP door', () => {
     expect(Buffer.from(screen.content[0].data, 'base64').subarray(1, 4).toString()).toBe('PNG');
   });
 
-  it('refuses to act outside agent mode', async () => {
-    for (const [name, args] of [['do_action', { id: 'steps:left' }], ['send_command', { text: 'open the menu' }], ['press', { buttons: ['A'] }], ['load_state', { name: 'nope' }]] as const) {
-      const r = await call(name, args);
-      expect(r.isError).toBe(true);
-      expect(text(r)).toBe('The player has the controls.');
-    }
-  });
-
-  it('acts in agent mode and returns the outcome', async () => {
-    srv.session.set('mode', 'agent');
+  it('acts while the player is idle, in voice mode, and returns the outcome', async () => {
     const before = JSON.parse(text(await call('get_state')));
     const r = await call('do_action', { id: 'steps:left', arg: 1 });
     expect(r.isError).toBeFalsy();
@@ -50,8 +41,7 @@ describe.skipIf(!hasFixture('fx-bedroom'))('MCP door', () => {
     const cmd = JSON.parse(text(await call('send_command', { text: 'open the menu' })));
     expect(cmd.status).toBe('prompt');
     expect(JSON.parse(text(await call('press', { buttons: ['B'] }))).status).toBe('done');
-    expect(before.inputMode).toBe('agent');
-    srv.session.set('mode', 'voice');
+    expect(before.inputMode).toBe('voice');
   });
 
   it('stop works in any mode', async () => {
@@ -59,13 +49,11 @@ describe.skipIf(!hasFixture('fx-bedroom'))('MCP door', () => {
     expect(r.isError).toBeFalsy();
   });
 
-  it('rejects a save name with a path in it, and saves under a plain name in agent mode', async () => {
-    srv.session.set('mode', 'agent');
+  it('rejects a save name with a path in it, and saves under a plain name', async () => {
     expect((await call('save_state', { name: '../x' })).isError).toBe(true);
     expect((await call('save_state', { name: 't-mcp' })).isError).toBeFalsy();
     expect((await call('load_state', { name: 't-mcp' })).isError).toBeFalsy();
     expect((await call('load_state', { name: 'no-such-save' })).isError).toBe(true);
-    srv.session.set('mode', 'voice');
   });
 
   it('ask returns the answer text', async () => {

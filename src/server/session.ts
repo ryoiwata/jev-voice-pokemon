@@ -43,8 +43,7 @@ export interface AnswererLike {
 
 export type Outcome = ActionResult | { status: 'answer' | 'asking' | 'refused' | 'nothing'; message: string };
 
-const REFUSED: Outcome = { status: 'refused', message: 'The player has the controls.' };
-const AGENT_MODE_ONLY: Outcome = { status: 'refused', message: 'Agent mode: say "stop" or "voice mode" to take over.' };
+const JUST_STOPPED: Outcome = { status: 'refused', message: 'The player pressed stop.' };
 const BUSY: Outcome = { status: 'refused', message: 'The player is doing something. Wait for it to finish.' };
 const CANCELLED: Outcome = { status: 'stopped', message: 'Cancelled.' };
 const QUICK_SAVE = 'quick';
@@ -61,8 +60,14 @@ export class Session extends EventEmitter {
   /** the action that is running now: who started it, and whether the player has since taken over */
   private current: { source: Source; takenOver: boolean } | null = null;
 
-  constructor(private deps: { game: GameLike; interpreter: Interpreter; answerer: AnswererLike; jev: 'standin' | 'gateway' }) {
+  /** How long agents are held off after the player stops, so a looping agent cannot undo the stop at once. */
+  static readonly AGENT_HOLD_MS = 5000;
+  private agentHoldUntil = 0;
+  private now: () => number;
+
+  constructor(private deps: { game: GameLike; interpreter: Interpreter; answerer: AnswererLike; jev: 'standin' | 'gateway'; now?: () => number }) {
     super();
+    this.now = deps.now ?? Date.now;
   }
 
   info(): SessionInfo {
@@ -99,8 +104,8 @@ export class Session extends EventEmitter {
   /** Why this source may not act right now, or null if it may. The player always may. */
   private refusal(source: Source): Outcome | null {
     if (source === 'human') return null;
-    if (this.mode !== 'agent') return REFUSED;
-    // even in agent mode the player comes first: an agent never replaces what the player started or is holding
+    if (this.now() < this.agentHoldUntil) return JUST_STOPPED;
+    // the player comes first: an agent never replaces what the player started or is holding
     if (this.current?.source === 'human' || this.deps.game.ctl.get(Slot.HELD) !== 0) return BUSY;
     return null;
   }
@@ -117,7 +122,8 @@ export class Session extends EventEmitter {
     if (source === 'human' && this.current?.source === 'agent') this.current.takenOver = true;
   }
 
-  stop(_source: Source): void {
+  stop(source: Source): void {
+    if (source === 'human') this.agentHoldUntil = this.now() + Session.AGENT_HOLD_MS;
     this.gen++;
     this.deps.game.stop();
   }
@@ -128,8 +134,6 @@ export class Session extends EventEmitter {
       if (this.mode === value) return;
       this.gen++;
       this.mode = value as InputMode;
-      // leaving agent mode takes the controls back straight away
-      if (this.mode !== 'agent' && this.current?.source === 'agent') { this.current.takenOver = true; this.deps.game.stop(); }
     } else if (key === 'autoAdvance') ctl.set(Slot.AUTO_ADVANCE, value ? 1 : 0);
     else if (key === 'advancePaceMs') ctl.set(Slot.ADVANCE_PACE_MS, Number(value));
     else if (key === 'speed') ctl.set(Slot.SPEED_X100, Math.round(Number(value) * 100));
@@ -241,7 +245,7 @@ export class Session extends EventEmitter {
     return this.exec(p.choices[index], source, undefined, undefined);
   }
 
-  /** A typed or dictated command, from the player or (in agent mode) from an agent. */
+  /** A typed or dictated command, from the player or from an agent. */
   async handleText(text: string, source: Source): Promise<Outcome> {
     const { game, interpreter, answerer } = this.deps;
     const said = text.trim();
@@ -252,11 +256,6 @@ export class Session extends EventEmitter {
     const has = (id: string) => game.actions.some((a) => a.id === id);
     const fast = fastPath(said, has, this.pending !== null);
 
-    if (source === 'human' && this.mode === 'agent') {
-      // the agent has the controls: the player can only stop it or take them back
-      const takesOver = fast && (fast.kind === 'stop' || (fast.kind === 'set' && fast.key === 'mode'));
-      if (!takesOver) { this.log(source, 'failed', AGENT_MODE_ONLY.message, said); return AGENT_MODE_ONLY; }
-    }
     // this command now supersedes any older one still being worked out
     const g = ++this.gen;
     /** True if a stop, a newer command, a button or a mode change arrived while we were waiting. */

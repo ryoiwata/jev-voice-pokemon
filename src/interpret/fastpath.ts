@@ -28,7 +28,7 @@ export function fastPath(text: string, has: (id: string) => boolean, pending: bo
   // Any short utterance with the word in it counts; a long sentence that merely contains it does not.
   const words = t.replace(/[^a-z' ]/g, ' ').split(' ').filter(Boolean);
   if (t === 'cancel' || (words.length <= 5 && words.some((w) => w === 'stop' || w === 'halt'))) return { kind: 'stop' };
-  if ((m = t.match(/^(voice|text|controls|agent) mode$/))) return { kind: 'set', key: 'mode', value: m[1] as InputMode };
+  if ((m = t.match(/^(voice|text) mode$/))) return { kind: 'set', key: 'mode', value: m[1] as InputMode };
   if ((m = t.match(/^auto[- ]?advance (on|off)$/))) return { kind: 'set', key: 'autoAdvance', value: m[1] === 'on' };
   if (t === 'save') return { kind: 'save' };
   if (t === 'load') return { kind: 'load' };

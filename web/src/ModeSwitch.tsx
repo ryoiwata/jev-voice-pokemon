@@ -3,8 +3,6 @@ import type { InputMode } from '../../src/server/wire';
 const MODES: { id: InputMode; label: string; hint: string }[] = [
   { id: 'voice', label: 'Voice', hint: 'Dictated commands send themselves' },
   { id: 'text', label: 'Text', hint: 'Type a command and press Enter' },
-  { id: 'controls', label: 'Controls', hint: 'The keyboard plays the game directly' },
-  { id: 'agent', label: 'Agent', hint: 'An outside AI agent may play' },
 ];
 
 export function ModeSwitch({ mode, onChange }: { mode: InputMode; onChange: (m: InputMode) => void }) {

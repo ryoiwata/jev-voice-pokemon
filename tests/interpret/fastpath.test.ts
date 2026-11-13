@@ -31,7 +31,9 @@ describe('fastPath', () => {
     expect(fastPath('name him Sparky', () => false, false)).toBeNull();
   });
   it('switches modes and settings', () => {
-    expect(fastPath('agent mode', has, false)).toEqual({ kind: 'set', key: 'mode', value: 'agent' });
+    expect(fastPath('text mode', has, false)).toEqual({ kind: 'set', key: 'mode', value: 'text' });
+    expect(fastPath('agent mode', has, false)).toBeNull();
+    expect(fastPath('controls mode', has, false)).toBeNull();
     expect(fastPath('Voice mode.', has, false)).toEqual({ kind: 'set', key: 'mode', value: 'voice' });
     expect(fastPath('auto advance off', has, false)).toEqual({ kind: 'set', key: 'autoAdvance', value: false });
     expect(fastPath('save', has, false)).toEqual({ kind: 'save' });

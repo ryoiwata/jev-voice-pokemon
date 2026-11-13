@@ -20,7 +20,9 @@ describe('parseClientMsg', () => {
     expect(parseClientMsg('{"type":"text","text":5}')).toBeNull();
     expect(parseClientMsg('{"type":"choose","logId":"a","index":1}')).toEqual({ type: 'choose', logId: 'a', index: 1 });
     expect(parseClientMsg('{"type":"click","col":3,"row":40}')).toBeNull();
-    expect(parseClientMsg('{"type":"set","key":"mode","value":"agent"}')).toEqual({ type: 'set', key: 'mode', value: 'agent' });
+    expect(parseClientMsg('{"type":"set","key":"mode","value":"text"}')).toEqual({ type: 'set', key: 'mode', value: 'text' });
+    expect(parseClientMsg('{"type":"set","key":"mode","value":"agent"}')).toBeNull();
+    expect(parseClientMsg('{"type":"set","key":"mode","value":"controls"}')).toBeNull();
     expect(parseClientMsg('{"type":"set","key":"mode","value":"turbo"}')).toBeNull();
   });
 });

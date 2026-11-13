@@ -33,7 +33,7 @@ export function App() {
     const held = new Set<Button>();
     const down = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { send({ type: 'stop' }); return; }
-      if (modeRef.current !== 'controls' || typingInto(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (typingInto(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
       const b = buttonFor(e, DEFAULT_KEYMAP);
       if (!b) return;
       e.preventDefault();
