@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup v3: page overhaul</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;600;800&family=Pixelify+Sans:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --desk: #dcd9ea;        /* lavender desk the console sits on */
+  --paper: #f8f7fc;       /* panels */
+  --paper-2: #eeecf6;     /* wells inside panels */
+  --ink: #1c1a3a;         /* deep navy text */
+  --soft: #5d5a7c;        /* secondary text */
+  --rule: #cfcbe2;
+  --indigo: #4a3fb0;      /* the console */
+  --indigo-hi: #6a5fd6; --indigo-lo: #352c86;
+  --red: #d8342c;         /* Pokémon Red: stop, battle */
+  --press: #ffd23f;       /* a pressed button */
+  --hp: #2fa36b; --hp-low: #dfa214; --hp-crit: #d8342c;
+  --gb0: #e3ecc6; --gb3: #22361f;
+  --ui: "Atkinson Hyperlegible Next", "Atkinson Hyperlegible", system-ui, sans-serif;
+  --px: "Pixelify Sans", var(--ui);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--desk); color: var(--ink); font: 16px/1.45 var(--ui); min-height: 100vh; }
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+
+.demo { background: var(--ink); color: #fff; font-size: 14px; padding: 9px 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.demo span { opacity: .8; margin-right: 6px; }
+.demo button { background: transparent; color: #fff; border: 1.5px solid rgba(255,255,255,.4); border-radius: 99px; padding: 4px 13px; }
+.demo button.on { background: #fff; color: var(--ink); border-color: #fff; font-weight: 600; }
+
+.page { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(320px, 1fr); gap: 28px; max-width: 1320px; margin: 0 auto; padding: 18px 24px 40px; align-items: start; }
+@media (max-width: 940px) { .page { grid-template-columns: 1fr; } }
+
+.head { display: flex; align-items: center; gap: 14px; margin-bottom: 26px; }
+.head h1 { font: 700 22px/1 var(--px); margin: 0; letter-spacing: .01em; }
+.jev { display: inline-flex; align-items: center; gap: 7px; font-size: 14px; color: var(--soft); }
+.jev i { width: 9px; height: 9px; border-radius: 50%; background: var(--hp); }
+.head .gap { flex: 1; }
+.tool { background: transparent; border: 0; padding: 8px 10px; border-radius: 9px; color: var(--soft); font-size: 15px; }
+.tool:hover { background: rgba(28,26,58,.08); color: var(--ink); }
+
+/* ───────── the console ───────── */
+.gba { position: relative; isolation: isolate; display: grid; grid-template-columns: 1fr minmax(0, 2.25fr) 1fr; align-items: center;
+  padding: 30px 6px 46px; border-radius: 54px 54px 150px 150px / 48px 48px 120px 120px;
+  background: linear-gradient(178deg, var(--indigo-hi) 0%, var(--indigo) 30%, var(--indigo-lo) 100%);
+  box-shadow: inset 0 3px 0 rgba(255,255,255,.28), inset 0 -14px 22px rgba(20,14,70,.35), 0 3px 0 #2a2270, 0 30px 40px -18px rgba(40,30,110,.55); }
+.shoulder { position: absolute; top: -11px; width: 22%; height: 30px; z-index: -1; border-radius: 18px 18px 0 0; background: linear-gradient(180deg, #d5d6e2, #a4a6b8); display: grid; place-items: start center; padding-top: 2px; font: 700 12px var(--px); color: #62657a; }
+.shoulder.l { left: 4.5%; } .shoulder.r { right: 4.5%; }
+.wing { display: flex; flex-direction: column; align-items: center; gap: 26px; }
+.bezel { background: #17161f; border-radius: 16px 16px 30px 30px; padding: 18px 20px 12px; box-shadow: inset 0 0 0 2px #000, 0 2px 0 rgba(255,255,255,.22); }
+.lcd { aspect-ratio: 3 / 2; background: #000; display: grid; place-items: center; overflow: hidden; border-radius: 3px; }
+.lcd img { height: 100%; aspect-ratio: 10 / 9; image-rendering: pixelated; display: block; cursor: crosshair; }
+.mark { text-align: center; font: 500 11px var(--px); letter-spacing: .28em; color: #777890; margin-top: 9px; }
+
+.dpad { position: relative; width: 120px; height: 120px; border-radius: 50%; background: rgba(20,14,70,.28); }
+.dpad button, .dpad i { position: absolute; width: 36px; height: 36px; background: #24232e; border: 0; padding: 0; color: #6d6c80; font-size: 12px; }
+.dpad i { left: 42px; top: 42px; }
+.dpad .u { left: 42px; top: 6px; border-radius: 8px 8px 0 0; } .dpad .d { left: 42px; top: 78px; border-radius: 0 0 8px 8px; }
+.dpad .l { left: 6px; top: 42px; border-radius: 8px 0 0 8px; } .dpad .r { left: 78px; top: 42px; border-radius: 0 8px 8px 0; }
+.pills { display: grid; gap: 11px; justify-items: start; }
+.pills button { display: flex; align-items: center; gap: 9px; background: none; border: 0; padding: 0; font: 500 11px var(--px); letter-spacing: .1em; color: rgba(255,255,255,.82); }
+.pills button::before { content: ""; width: 44px; height: 15px; border-radius: 9px; background: linear-gradient(180deg, #d5d6e2, #a4a6b8); box-shadow: 0 2px 0 rgba(20,14,70,.4); }
+.ab { position: relative; width: 132px; height: 104px; }
+.ab button { position: absolute; width: 60px; height: 60px; border-radius: 50%; border: 0; font: 700 20px var(--px); color: #5d6075; background: radial-gradient(circle at 34% 28%, #f4f4f9, #a9abbd); box-shadow: 0 5px 0 rgba(20,14,70,.45); }
+.ab .a { right: 0; top: 0; } .ab .b { left: 0; bottom: 0; }
+.grille { display: flex; gap: 6px; transform: rotate(-26deg); } .grille b { width: 5px; height: 26px; border-radius: 3px; background: rgba(20,14,70,.42); }
+.power { position: absolute; left: 21%; bottom: 30px; display: flex; align-items: center; gap: 6px; font: 500 9px var(--px); letter-spacing: .14em; color: rgba(255,255,255,.6); }
+.power i { width: 7px; height: 7px; border-radius: 50%; background: #62f59c; box-shadow: 0 0 7px #62f59c; }
+/* pressed, whoever pressed it */
+.dpad .on { background: var(--press); color: var(--ink); }
+.ab .on { background: var(--press); color: var(--ink); transform: translateY(4px); box-shadow: 0 1px 0 rgba(20,14,70,.45), 0 0 0 5px rgba(255,210,63,.35); }
+.pills .on::before { background: var(--press); transform: translateY(2px); box-shadow: 0 0 0 4px rgba(255,210,63,.35); }
+
+/* ───────── what's happening ───────── */
+.lane { margin-top: 30px; }
+.say { display: flex; gap: 10px; align-items: stretch; }
+.switch { display: flex; background: var(--paper); border: 2px solid var(--ink); border-radius: 14px; padding: 3px; }
+.switch button { border: 0; background: none; padding: 0 18px; border-radius: 10px; font-weight: 600; color: var(--soft); }
+.switch button[aria-checked="true"] { background: var(--ink); color: #fff; }
+.field { flex: 1; display: flex; align-items: center; gap: 12px; background: #fff; border: 2px solid var(--ink); border-radius: 14px; padding: 0 16px; min-height: 60px; font-size: 19px; color: var(--soft); }
+.ear { width: 12px; height: 12px; border-radius: 50%; background: var(--red); animation: ear 1.6s ease-in-out infinite; }
+@keyframes ear { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .ear { animation: none; } }
+.halt { background: var(--red); color: #fff; border: 2px solid var(--ink); border-radius: 14px; padding: 0 22px; font-weight: 800; font-size: 18px; display: flex; align-items: center; gap: 9px; }
+.halt kbd { font: 600 12px var(--ui); border: 1.5px solid rgba(255,255,255,.7); border-radius: 6px; padding: 1px 6px; }
+
+.trace { margin-top: 14px; display: grid; grid-template-columns: 1fr 1fr 1.1fr; background: var(--paper); border-radius: 16px; overflow: hidden; }
+.trace > div { padding: 13px 18px 15px; position: relative; min-width: 0; }
+.trace > div + div { border-left: 2px solid var(--desk); }
+.trace > div + div::before { content: ""; position: absolute; left: -9px; top: 50%; width: 14px; height: 14px; background: var(--paper); border-top: 2px solid var(--desk); border-right: 2px solid var(--desk); transform: translateY(-50%) rotate(45deg); z-index: 1; }
+.trace small { display: block; font-size: 13px; color: var(--soft); margin-bottom: 2px; }
+.trace strong { font-size: 18px; font-weight: 600; display: block; }
+.trace .sure { font-size: 13px; color: var(--hp); font-weight: 600; margin-left: 6px; }
+.keys { display: flex; gap: 5px; flex-wrap: wrap; min-height: 28px; align-items: center; }
+.keys b { min-width: 26px; height: 26px; padding: 0 6px; border-radius: 7px; background: var(--paper-2); display: grid; place-items: center; font: 700 13px var(--ui); color: var(--soft); }
+.keys b.now { background: var(--press); color: var(--ink); }
+.who { font-size: 13px; color: var(--soft); }
+
+.ask, .answer { margin-top: 14px; background: var(--paper); border-radius: 16px; padding: 16px 18px; border-left: 8px solid var(--hp-low); }
+.answer { border-left-color: var(--indigo); }
+.ask p, .answer p { margin: 0 0 12px; font-size: 18px; font-weight: 600; } .answer p { font-weight: 400; margin: 6px 0 0; max-width: 62ch; }
+.ask small, .answer small { color: var(--soft); font-size: 13px; }
+.opts { display: flex; gap: 10px; flex-wrap: wrap; }
+.opts button { display: flex; align-items: center; gap: 10px; background: #fff; border: 2px solid var(--ink); border-radius: 12px; padding: 9px 16px 9px 9px; font-size: 17px; font-weight: 600; }
+.opts button span { width: 30px; height: 30px; border-radius: 8px; background: var(--ink); color: #fff; display: grid; place-items: center; font: 700 16px var(--px); }
+[hidden] { display: none !important; }
+
+.past { margin-top: 22px; }
+.past h2 { font-size: 15px; font-weight: 600; margin: 0 0 6px; color: var(--soft); }
+.past ol { list-style: none; margin: 0; padding: 0; }
+.past li { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 8px; padding: 9px 0; border-top: 1.5px solid var(--rule); align-items: baseline; }
+.past q { color: var(--soft); quotes: "“" "”"; }
+.past time { color: var(--soft); font-size: 13px; font-variant-numeric: tabular-nums; }
+.past .by { font-size: 12px; background: var(--ink); color: #fff; border-radius: 5px; padding: 1px 6px; margin-left: 8px; }
+.s-done { color: var(--hp); } .s-ask { color: var(--hp-low); } .s-ans { color: var(--indigo); } .s-no { color: var(--red); }
+
+/* ───────── sidebar ───────── */
+aside { display: grid; gap: 18px; }
+.sec { background: var(--paper); border-radius: 18px; padding: 16px 18px 18px; }
+.sec > h2 { margin: 0 0 4px; font: 700 18px var(--px); display: flex; justify-content: space-between; align-items: baseline; }
+.sec > h2 span { font: 400 14px var(--ui); color: var(--soft); }
+.pic { background: var(--gb0); border-radius: 12px; display: grid; place-items: center; flex: none; }
+.pic svg { width: 86%; height: 86%; image-rendering: pixelated; }
+
+.foe { background: var(--red); color: #fff; }
+.foe > h2 span { color: rgba(255,255,255,.85); }
+.foe .row { display: flex; gap: 14px; align-items: center; margin-top: 10px; }
+.foe .pic { width: 84px; height: 84px; }
+.foe .nm { font: 700 22px var(--px); display: flex; gap: 10px; align-items: baseline; }
+.foe .bar { background: rgba(0,0,0,.28); }
+
+.mon { display: flex; gap: 14px; padding: 14px 0; border-top: 1.5px solid var(--rule); }
+.mon:first-of-type { border-top: 0; }
+.mon .pic { width: 72px; height: 72px; }
+.mon.out .pic { box-shadow: 0 0 0 3px var(--indigo); }
+.mon .body { flex: 1; min-width: 0; }
+.nm { font: 700 19px var(--px); display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.nm small { font: 400 14px var(--ui); color: var(--soft); }
+.lv { margin-left: auto; font: 600 15px var(--ui); font-variant-numeric: tabular-nums; }
+.tag { font: 700 12px var(--px); border-radius: 6px; padding: 1px 7px; background: var(--indigo); color: #fff; }
+.tag.ill { background: #8a3fb0; }
+.hpline { display: flex; align-items: center; gap: 10px; margin-top: 5px; }
+.bar { flex: 1; height: 10px; border-radius: 99px; background: var(--paper-2); overflow: hidden; }
+.bar i { display: block; height: 100%; border-radius: 99px; background: var(--hp); } .bar i.low { background: var(--hp-low); } .bar i.crit { background: var(--hp-crit); }
+.foe .bar i.low { background: var(--press); }
+.hpline span { font: 600 15px var(--ui); font-variant-numeric: tabular-nums; min-width: 54px; text-align: right; }
+.moves { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 16px; margin: 9px 0 0; padding: 0; list-style: none; font-size: 15px; }
+.moves li { display: flex; justify-content: space-between; gap: 8px; }
+.moves em { font: 400 14px var(--ui); font-variant-numeric: tabular-nums; color: var(--soft); font-style: normal; }
+.moves .empty, .moves .empty em { color: var(--red); }
+
+/* the trainer card, as the game draws one */
+.card { background: var(--indigo); color: #fff; border-radius: 18px; padding: 16px 18px 18px; position: relative; }
+.card .row { display: flex; gap: 14px; align-items: center; }
+.card .pic { width: 64px; height: 64px; }
+.card .place { font: 700 20px var(--px); } .card .sub { font-size: 14px; opacity: .85; }
+.card dl { display: grid; grid-template-columns: repeat(3, auto); justify-content: space-between; margin: 14px 0 0; }
+.card dt { font-size: 13px; opacity: .8; } .card dd { margin: 0; font: 600 17px var(--ui); }
+.badges { display: grid; grid-template-columns: repeat(8, 1fr); gap: 7px; margin-top: 14px; }
+.badges i { aspect-ratio: 1; border-radius: 50%; background: rgba(0,0,0,.25); box-shadow: inset 0 2px 3px rgba(0,0,0,.3); }
+.badges i.won { background: radial-gradient(circle at 35% 30%, #fff3b0, var(--press) 55%, #b98a00); box-shadow: none; }
+.card .cap { font-size: 13px; opacity: .8; margin-top: 6px; }
+
+.bag { list-style: none; margin: 8px 0 0; padding: 0; }
+.bag li { display: flex; align-items: center; gap: 11px; padding: 8px 0; border-top: 1.5px solid var(--rule); }
+.bag li:first-child { border-top: 0; }
+.bag svg { width: 26px; height: 26px; flex: none; }
+.bag em { margin-left: auto; font: 600 16px var(--ui); font-style: normal; color: var(--soft); }
+</style>
+</head>
+<body>
+<div class="demo"><span>Mockup. Show the page while:</span>
+  <button data-s="run" class="on">a command runs</button><button data-s="ask">it isn't sure</button><button data-s="ans">it answers a question</button>
+  <span style="margin-left:auto">Pokémon pictures are stand-ins; the real ones, and the game picture, come from your ROM.</span></div>
+
+<div class="page">
+  <main>
+    <div class="head">
+      <h1>Jev Voice Pokémon</h1>
+      <span class="jev"><i></i>Jev is connected</span>
+      <span class="gap"></span>
+      <button class="tool">Sound</button><button class="tool">Saves</button><button class="tool">Settings</button>
+    </div>
+
+    <div class="gba">
+      <div class="shoulder l">L</div><div class="shoulder r">R</div>
+      <div class="wing">
+        <div class="dpad"><i></i><button class="u" data-b="UP" aria-label="Up">▲</button><button class="l" data-b="LEFT" aria-label="Left">◀</button><button class="r" data-b="RIGHT" aria-label="Right">▶</button><button class="d" data-b="DOWN" aria-label="Down">▼</button></div>
+        <div class="pills"><button data-b="START">START</button><button data-b="SELECT">SELECT</button></div>
+      </div>
+      <div class="bezel"><div class="lcd"><img alt="Game screen" title="Click a spot to walk there" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAJCAYAAAAVb42gAAAAEUlEQVR42mN8/+H9fwYiAONQVAgAPGkZ7sqbZ4YAAAAASUVORK5CYII="></div><div class="mark">VOICE BOY</div></div>
+      <div class="wing">
+        <div class="ab"><button class="b" data-b="B">B</button><button class="a" data-b="A">A</button></div>
+        <div class="grille"><b></b><b></b><b></b><b></b><b></b></div>
+      </div>
+      <div class="power"><i></i>POWER</div>
+    </div>
+
+    <section class="lane">
+      <div class="say">
+        <div class="switch" role="radiogroup" aria-label="How you give commands">
+          <button role="radio" aria-checked="true">Voice</button><button role="radio" aria-checked="false">Text</button>
+        </div>
+        <div class="field"><i class="ear"></i><span id="hint">Listening. Say what you want to do.</span></div>
+        <button class="halt">Stop <kbd>Esc</kbd></button>
+      </div>
+
+      <div class="trace" id="run">
+        <div><small>You said</small><strong>“go downstairs”</strong></div>
+        <div><small>Jev chose</small><strong>Take the stairs<span class="sure">96% sure</span></strong></div>
+        <div><small>Pressing <span class="who">for you</span></small><div class="keys" id="keys"></div></div>
+      </div>
+
+      <div class="ask" id="ask" hidden>
+        <small>You said “go to the door”</small>
+        <p>Which one did you mean?</p>
+        <div class="opts"><button><span>1</span>The front door</button><button><span>2</span>The stairs</button><button><span>3</span>Neither</button></div>
+      </div>
+
+      <div class="answer" id="ans" hidden>
+        <small>You asked “what is Onix weak to?” No buttons were pressed.</small>
+        <p>Water and Grass hit Onix hardest, at four times the damage. Ice, Ground and Fighting moves do double. Your Charmander's Ember will barely scratch it.</p>
+      </div>
+
+      <div class="past">
+        <h2>Earlier</h2>
+        <ol>
+          <li><span class="s-done">✓</span><div><q>talk to mom</q> Talked to Mom</div><time>12:04</time></li>
+          <li><span class="s-ans">✦</span><div><q>where do I get my first Pokémon?</q> Answered</div><time>12:03</time></li>
+          <li><span class="s-done">✓</span><div>Opened the bag<span class="by">agent</span></div><time>12:01</time></li>
+          <li><span class="s-no">✕</span><div><q>go to Cerulean City</q> That's too far to do from here</div><time>11:58</time></li>
+        </ol>
+      </div>
+    </section>
+  </main>
+
+  <aside>
+    <section class="sec foe">
+      <h2>In battle <span>a wild Pokémon</span></h2>
+      <div class="row">
+        <div class="pic"><svg viewBox="0 0 14 14" shape-rendering="crispEdges"><path fill="#22361f" d="M4 2h6v1h1v2h1v5h-1v1h-1v1H4v-1H3v-1H2V5h1V3h1z"/><path fill="#a8c070" d="M4 3h6v2h1v5h-1v1H4v-1H3V5h1z"/><path fill="#22361f" d="M5 5h1v2H5zM8 5h1v2H8zM6 9h2v1H6z"/></svg></div>
+        <div style="flex:1"><div class="nm">Rattata <span class="lv">Lv 3</span></div>
+          <div class="hpline"><div class="bar"><i class="low" style="width:42%"></i></div><span>42%</span></div></div>
+      </div>
+    </section>
+
+    <section class="sec">
+      <h2>Party <span>2 of 6</span></h2>
+      <div class="mon out">
+        <div class="pic"><svg viewBox="0 0 14 14" shape-rendering="crispEdges"><path fill="#22361f" d="M5 1h4v1h1v1h1v3h1v4h-1v2H9v1H5v-1H3v-2H2V6h1V3h1V2h1z"/><path fill="#507848" d="M5 2h4v1h1v3h1v4h-1v1H4v-1H3V6h1V3h1z"/><path fill="#e3ecc6" d="M5 4h1v2H5zM8 4h1v2H8zM5 8h4v2H5z"/></svg></div>
+        <div class="body">
+          <div class="nm">SPARKY <small>Charmander</small><span class="tag">in battle</span><span class="lv">Lv 9</span></div>
+          <div class="hpline"><div class="bar"><i style="width:89%"></i></div><span>24/27</span></div>
+          <ul class="moves"><li>Scratch <em>31/35</em></li><li>Growl <em>40/40</em></li><li>Ember <em>22/25</em></li></ul>
+        </div>
+      </div>
+      <div class="mon">
+        <div class="pic"><svg viewBox="0 0 14 14" shape-rendering="crispEdges"><path fill="#22361f" d="M3 3h3v1h2V3h3v2h1v5h-1v2H3v-2H2V5h1z"/><path fill="#a8c070" d="M4 4h2v1h2V4h2v2h1v4h-1v1H4v-1H3V6h1z"/><path fill="#22361f" d="M5 6h1v1H5zM8 6h1v1H8z"/><path fill="#507848" d="M6 8h2v2H6z"/></svg></div>
+        <div class="body">
+          <div class="nm">Pidgey <span class="tag ill">poisoned</span><span class="lv">Lv 5</span></div>
+          <div class="hpline"><div class="bar"><i class="crit" style="width:16%"></i></div><span>3/19</span></div>
+          <ul class="moves"><li>Gust <em>30/35</em></li><li class="empty">Sand-Attack <em>0/15</em></li></ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="row">
+        <div class="pic"><svg viewBox="0 0 14 14" shape-rendering="crispEdges"><path fill="#22361f" d="M4 1h6v1h1v2h-1v1h1v4h-1v4H8v-3H6v3H4V9H3V5h1V4H3V2h1z"/><path fill="#a8c070" d="M5 2h4v2H5zM4 5h6v4H4z"/><path fill="#e3ecc6" d="M5 3h4v1H5z"/></svg></div>
+        <div><div class="place">Route 1</div><div class="sub">RED, facing north</div></div>
+      </div>
+      <dl><div><dt>Money</dt><dd>¥3,000</dd></div><div><dt>Pokédex</dt><dd>4 seen, 2 caught</dd></div><div><dt>Played</dt><dd>0:42</dd></div></dl>
+      <div class="badges"><i class="won"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="cap">1 of 8 badges</div>
+    </section>
+
+    <section class="sec">
+      <h2>Bag <span>3 kinds of item</span></h2>
+      <ul class="bag">
+        <li><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="#fff" stroke="#1c1a3a" stroke-width="1.6"/><path d="M2 10a8 8 0 0 1 16 0z" fill="#d8342c" stroke="#1c1a3a" stroke-width="1.6"/><circle cx="10" cy="10" r="2.6" fill="#fff" stroke="#1c1a3a" stroke-width="1.6"/></svg>Poké Ball<em>×5</em></li>
+        <li><svg viewBox="0 0 20 20"><rect x="5.5" y="7" width="9" height="11" rx="2.2" fill="#b9a6f5" stroke="#1c1a3a" stroke-width="1.6"/><rect x="8" y="2" width="4" height="5" fill="#e4e2f0" stroke="#1c1a3a" stroke-width="1.6"/></svg>Potion<em>×2</em></li>
+        <li><svg viewBox="0 0 20 20"><rect x="3" y="4.5" width="14" height="11.5" rx="1.5" fill="#ffd23f" stroke="#1c1a3a" stroke-width="1.6"/><path d="M3 9.5h14M10 4.5v11.5" stroke="#1c1a3a" stroke-width="1.6"/></svg>Oak's Parcel<em>×1</em></li>
+      </ul>
+    </section>
+  </aside>
+</div>
+<script>
+// demo only
+const seq = [['DOWN',240],['DOWN',240],['RIGHT',240],['RIGHT',240],['RIGHT',240],['UP',240],['A',300],[null,1500]];
+const glyph = { UP:'▲', DOWN:'▼', LEFT:'◀', RIGHT:'▶', A:'A', B:'B', START:'START', SELECT:'SELECT' };
+const keys = document.getElementById('keys'); let i = 0, running = true;
+const clear = () => document.querySelectorAll('.on[data-b]').forEach((e) => e.classList.remove('on'));
+function step() {
+  clear();
+  if (running) {
+    const [b] = seq[i];
+    if (i === 0) keys.innerHTML = '';
+    keys.querySelectorAll('.now').forEach((e) => e.classList.remove('now'));
+    if (b) { document.querySelector(`[data-b="${b}"]`).classList.add('on'); const k = document.createElement('b'); k.textContent = glyph[b]; k.className = 'now'; keys.append(k); }
+  }
+  const ms = seq[i][1];
+  setTimeout(() => { clear(); setTimeout(() => { i = (i + 1) % seq.length; step(); }, 80); }, ms - 80);
+}
+step();
+const hints = { run: 'Listening. Say what you want to do.', ask: 'Say “one”, “two” or “three”.', ans: 'Listening. Say what you want to do.' };
+document.querySelectorAll('.demo button').forEach((b) => b.onclick = () => {
+  document.querySelectorAll('.demo button').forEach((x) => x.classList.toggle('on', x === b));
+  for (const id of ['run', 'ask', 'ans']) document.getElementById(id).hidden = id !== b.dataset.s;
+  running = b.dataset.s === 'run'; document.getElementById('hint').textContent = hints[b.dataset.s];
+});
+document.querySelectorAll('.switch button').forEach((b) => b.onclick = () => document.querySelectorAll('.switch button').forEach((x) => x.setAttribute('aria-checked', String(x === b))));
+</script>
+</body>
+</html>
