@@ -50,24 +50,41 @@ export function fastPath(text: string, has: (id: string) => boolean, pending: bo
 
   if ((m = t.match(/^(?:press |push |hit )?(a|b|start|select)(?: button)?$/))) return { kind: 'run', id: `press:${m[1].toUpperCase()}` };
 
+  if (/^(next|continue|okay|ok)$/.test(t) && has('text:next')) return { kind: 'run', id: 'text:next' };
+
   // Movement in the ways people say it: "right", "move to the right", "walk up three steps", "go north",
   // "take 3 steps left", "move two steps to the left". The count may come before or after the direction.
+  // "Forward" is the way the player is facing. "Keep going", "continue" and "until something is in the
+  // way" mean as far as it goes.
+  const mv = t.replace(/,/g, ' ').replace(/\s+/g, ' ').replace(/^(?:let'?s|please|now|and|then|okay|ok) /, '');
   const N = '(\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|a)';
-  const D = '(up|down|left|right|north|south|east|west)';
+  const D = '(up|down|left|right|north|south|east|west|straight ahead|straight on|straight|forwards?|ahead|onwards?)';
   const V = '(?:go |walk |move |step |head |take )?';
   const U = '(?: steps?| times?| tiles?| squares?| spaces?)?';
-  const after = t.match(new RegExp(`^${V}(?:to the |towards? (?:the )?)?${D}(?: ${N})?${U}$`));
-  const before = after ? null : t.match(new RegExp(`^${V}${N}${U} (?:to the |towards? (?:the )?)?${D}$`));
+  const TO = '(?:to the |towards? (?:the )?)?';
+  const KEEP = '(?:keep (?:on )?(?:going|walking|moving|heading)|continue(?: going| walking| moving| on)?|carry on(?: going| walking)?|go on)';
+  const AS_FAR = 20; // the most steps there are: the walk ends when something is in the way
+  const which = (word: string | undefined) => (word === undefined || !/^(up|down|left|right|north|south|east|west)$/.test(word)
+    ? 'forward' : ({ north: 'up', south: 'down', east: 'right', west: 'left' } as Record<string, string>)[word] ?? word);
+  const far = mv.match(new RegExp(`^${KEEP}(?: ${TO}(?:(?:straight|forwards?|ahead|onwards?) )?${D})?(?: until .+)?$`))
+    ?? mv.match(new RegExp(`^${V}${TO}${D}(?: all the way)?(?: until .+)$`))
+    ?? mv.match(new RegExp(`^${V}${TO}${D} all the way$`))
+    ?? mv.match(new RegExp(`^${V}all the way ${TO}${D}$`));
+  if (far) {
+    const dir = which(far[1]);
+    // said during dialogue with no direction, "keep going" means the next line
+    if (far[1] === undefined && has('text:next')) return { kind: 'run', id: 'text:next' };
+    return has(`steps:${dir}`) ? { kind: 'run', id: `steps:${dir}`, arg: AS_FAR } : null;
+  }
+  const after = mv.match(new RegExp(`^${V}${TO}${D}(?: ${N})?${U}$`));
+  const before = after ? null : mv.match(new RegExp(`^${V}${N}${U} ${TO}${D}$`));
   if (after || before) {
-    const word = (after ? after[1] : before![2]);
-    const dir = ({ north: 'up', south: 'down', east: 'right', west: 'left' } as Record<string, string>)[word] ?? word;
+    const dir = which(after ? after[1] : before![2]);
     const count = after ? after[2] : before![1];
     const n = count === undefined || count === 'a' ? 1 : num(count);
-    if (n >= 1 && n <= 20) return has(`steps:${dir}`) ? { kind: 'run', id: `steps:${dir}`, arg: n } : n === 1 ? { kind: 'run', id: `press:${dir.toUpperCase()}` } : null;
+    if (n >= 1 && n <= 20) return has(`steps:${dir}`) ? { kind: 'run', id: `steps:${dir}`, arg: n } : n === 1 && dir !== 'forward' ? { kind: 'run', id: `press:${dir.toUpperCase()}` } : null;
     return null;
   }
-
-  if (/^(next|continue|okay|ok)$/.test(t)) return has('text:next') ? { kind: 'run', id: 'text:next' } : null;
 
   if (has('name') && (m = raw.match(/^(?:name|call)\s+(?:(?:it|him|her|them|me)\s+)?(.+)$/i))) return { kind: 'run', id: 'name', arg: { text: m[1].trim() } };
 

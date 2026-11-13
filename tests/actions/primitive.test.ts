@@ -50,4 +50,27 @@ describe.skipIf(!hasFixture('fx-bedroom'))('primitive actions', () => {
     expect((await second).status).toBe('done');
     await g.shutdown();
   });
+
+describe.skipIf(!hasFixture('fx-bedroom'))('stepping forward', () => {
+  it('offers a step forward and takes it the way the player is facing', () => {
+    const ctx = boot('fx-bedroom');
+    expect(listActions(ctx).some((a) => a.id === 'steps:forward')).toBe(true);
+    runAction(ctx, 'steps:left', 1);
+    expect(ctx.gs.facing).toBe('left');
+    const x = ctx.gs.x;
+    const r = runAction(ctx, 'steps:forward', 1);
+    expect(r).toEqual({ status: 'done', message: 'Walked 1 step left.' });
+    expect(ctx.gs.x).toBe(x - 1);
+  });
+  it('walking until something is in the way ends as done, not as a failure', () => {
+    const ctx = boot('fx-bedroom');
+    const r = runAction(ctx, 'steps:left', 20);
+    expect(r.status).toBe('done');
+    expect(r.message).toMatch(/^Walked \d+ steps? left, as far as it goes\.$/);
+  });
+  it('a plain count that is cut short is still reported as cut short', () => {
+    const ctx = boot('fx-bedroom');
+    expect(runAction(ctx, 'steps:left', 15).status).toBe('interrupted');
+  });
+});
 });

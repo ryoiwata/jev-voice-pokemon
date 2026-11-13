@@ -10,7 +10,8 @@ const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'sev
 /** How many steps a sentence asks for: a number in it, "all the way" for as far as possible, otherwise one. */
 export function stepCount(said: string): number {
   const t = said.toLowerCase();
-  if (/all the way|as far as|until .*(wall|stop|end)/.test(t)) return 20;
+  // "keep going", "continue", "until something is in the way": walk as far as it goes
+  if (/all the way|as far as|\buntil\b|\bkeep (?:on )?(?:going|walking|moving|heading)\b|\bcontinue\b|\bcarry on\b|\bgo on\b/.test(t)) return 20;
   if (/\bcouple\b/.test(t)) return 2;
   if (/\bfew\b|\bseveral\b/.test(t)) return 3;
   const digits = t.match(/\b(\d{1,2})\b/);

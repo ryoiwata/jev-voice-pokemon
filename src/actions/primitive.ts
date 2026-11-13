@@ -13,7 +13,10 @@ export const MAX_STEPS = 20;
 export function listPrimitive(ctx: Ctx): Action[] {
   const out: Action[] = BUTTONS.map((b) => ({ id: `press:${b}`, kind: 'press', label: `Press ${b}` }));
   out.push({ id: 'wait', kind: 'press', label: 'Wait a moment' });
-  if (detectMode(ctx) === 'overworld') for (const d of DIRS) out.push({ id: `steps:${d}`, kind: 'steps', label: `Step ${d}`, hint: `Take plain steps ${d}: only when the player gives just this direction ("go ${d}", "move ${d} a bit") and names no thing or place to go to` });
+  if (detectMode(ctx) === 'overworld') {
+    for (const d of DIRS) out.push({ id: `steps:${d}`, kind: 'steps', label: `Step ${d}`, hint: `Take plain steps ${d}: only when the player gives just this direction ("go ${d}", "move ${d} a bit", "keep going ${d}" for as far as it goes) and names no thing or place to go to` });
+    out.push({ id: 'steps:forward', kind: 'steps', label: 'Step forward', hint: 'Take plain steps forward, the way the player is already facing: "forward", "go straight", "keep going", "continue" with no direction and no thing or place named' });
+  }
   return out;
 }
 
@@ -50,7 +53,10 @@ export function runPrimitive(ctx: Ctx, a: Action, arg?: unknown): ActionResult {
     tap(ctx, b, 10);
     return { status: 'done', message: `Pressed ${b}.` };
   }
-  const dir = a.id.slice('steps:'.length) as Dir;
+  const asked = a.id.slice('steps:'.length);
+  const facing = ctx.gs.facing;
+  if (asked === 'forward' && !(DIRS as readonly string[]).includes(facing)) return { status: 'failed', message: "Can't tell which way is forward right now." };
+  const dir = (asked === 'forward' ? facing : asked) as Dir;
   const want = Math.max(1, Math.min(MAX_STEPS, Math.floor(Number(arg ?? 1)) || 1));
   const map0 = ctx.gs.mapId;
   let taken = 0;
@@ -60,6 +66,9 @@ export function runPrimitive(ctx: Ctx, a: Action, arg?: unknown): ActionResult {
   }
   const steps = (n: number) => `${n} ${n === 1 ? 'step' : 'steps'}`;
   if (taken === want) return { status: 'done', message: `Walked ${steps(taken)} ${dir}.` };
-  const why = interruption(ctx) ?? 'Something is in the way.';
+  const came = interruption(ctx);
+  // the most steps there are means "until something is in the way", so reaching a wall is the walk finishing, not failing
+  if (want === MAX_STEPS && taken > 0 && !came) return { status: 'done', message: `Walked ${steps(taken)} ${dir}, as far as it goes.` };
+  const why = came ?? 'Something is in the way.';
   return { status: 'interrupted', message: taken ? `Walked ${steps(taken)} ${dir}, then stopped. ${why}` : why };
 }

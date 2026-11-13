@@ -553,3 +553,17 @@ describe('Session: opening a menu never picks from it', () => {
     expect(r.status).toBe('prompt');
   });
 });
+
+describe('stepCount: keep going', () => {
+  it.each(['keep going north', 'continue that way', 'carry on up', 'keep walking', 'go north until something is in the way', 'head up until you hit something'])('%s → until blocked', (said) => {
+    expect(stepCount(said)).toBe(20);
+  });
+});
+
+describe('Session: terrain by its everyday name', () => {
+  it('"go into grass" picks the tall grass option', async () => {
+    game.actions = [A('terrain:grass:3,4@12', 'Walk into the tall grass', { kind: 'go' }), A('sign:5,5@12', 'Read the sign'), A('steps:up', 'Step up', { kind: 'steps' }), A('press:A', 'Press A', { kind: 'press' })];
+    await s.handleText('Go into grass.', 'human');
+    expect(game.ran).toEqual([{ id: 'terrain:grass:3,4@12', arg: undefined }]);
+  });
+});

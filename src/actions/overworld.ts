@@ -214,6 +214,55 @@ function candidates(ctx: Ctx): Candidate[] {
     }
   }
 
+
+  // Terrain the player can see but the game does not name: tall grass and water. Read from the map's own
+  // tiles (the ROM marks which tile is tall grass in each area), and only what is on the screen right now.
+  const inView = (x: number, y: number) => x >= px - 4 && x <= px + 5 && y >= py - 4 && y <= py + 4;
+  const patchSeen = new Set<string>();
+  const patches: { tiles: Set<string>; mine: boolean }[] = [];
+  for (let y = py - 4; y <= py + 4; y++) for (let x = px - 4; x <= px + 5; x++) {
+    if (!g.grass(x, y) || patchSeen.has(`${x},${y}`)) continue;
+    const tiles = new Set<string>();
+    const stack = [{ x, y }];
+    while (stack.length) {
+      const t = stack.pop()!;
+      const k = `${t.x},${t.y}`;
+      if (patchSeen.has(k) || !inView(t.x, t.y) || !g.grass(t.x, t.y)) continue;
+      patchSeen.add(k); tiles.add(k);
+      stack.push({ x: t.x + 1, y: t.y }, { x: t.x - 1, y: t.y }, { x: t.x, y: t.y + 1 }, { x: t.x, y: t.y - 1 });
+    }
+    patches.push({ tiles, mine: tiles.has(`${px},${py}`) });
+  }
+  const GRASS_HINT = 'Walk into the tall grass (the long grass where wild Pokémon appear) and stand in it';
+  const intoGrass: Candidate[] = [];
+  for (const p of patches) {
+    if (p.mine) continue; // already standing in this one
+    const path = findPath(g, px, py, (x, y) => p.tiles.has(`${x},${y}`), { blocked, surf, maxNodes: 4000 });
+    if (!path || !path.length) continue;
+    const end = path[path.length - 1];
+    intoGrass.push({ action: { id: `terrain:grass:${end.x},${end.y}@${gs.mapId}`, kind: 'go', label: 'Walk into the tall grass', hint: GRASS_HINT, at: { x: end.x, y: end.y }, distance: path.length }, target: { kind: 'tile', x: end.x, y: end.y }, path });
+  }
+  intoGrass.sort((a, b) => a.path.length - b.path.length);
+  // with several patches in view, plain "go into the grass" means the nearest; the others are for "the grass on the left"
+  if (intoGrass.length > 1) intoGrass[0].action.hint = `${GRASS_HINT}. This is the NEAREST tall grass: choose it when the player just says "the grass" without saying which`;
+  out.push(...intoGrass.slice(0, 3));
+  if (g.grass(px, py)) {
+    const path = findPath(g, px, py, (x, y) => inView(x, y) && !g.grass(x, y), { blocked, surf, maxNodes: 4000 });
+    if (path?.length) {
+      const end = path[path.length - 1];
+      add({ id: `terrain:clear:${end.x},${end.y}@${gs.mapId}`, kind: 'go', label: 'Leave the tall grass', hint: 'Leave the tall grass: walk out of the long grass onto open ground', at: { x: end.x, y: end.y } }, { kind: 'tile', x: end.x, y: end.y }, path);
+    }
+  }
+  if (!surf) {
+    let best: { x: number; y: number; path: Step[] } | null = null;
+    for (let y = py - 4; y <= py + 4; y++) for (let x = px - 4; x <= px + 5; x++) {
+      if (!g.water(x, y)) continue;
+      const path = approach(g, px, py, x, y, blocked, surf);
+      if (path && (!best || path.length < best.path.length)) best = { x, y, path };
+    }
+    if (best) add({ id: `terrain:water:${best.x},${best.y}@${gs.mapId}`, kind: 'go', label: 'Go to the water', hint: "Go to the water (a pond, a river, the sea): walk to its edge and face it", at: { x: best.x, y: best.y } }, { kind: 'tile', x: best.x, y: best.y, face: { x: best.x, y: best.y } }, best.path);
+  }
+
   // field moves the party actually knows
   if (slotWithMove(ctx, 'CUT') >= 0) {
     for (let y = 0; y < g.h; y++) for (let x = 0; x < g.w; x++) {
@@ -399,7 +448,12 @@ export function runOverworld(ctx: Ctx, id: string): ActionResult {
   const { gs, emu } = ctx;
   const find = () => {
     if (id.startsWith('tile:')) { const [x, y] = id.slice(5).split(',').map(Number); return Number.isInteger(x) && Number.isInteger(y) ? tileCandidate(ctx, x, y) : null; }
-    return candidates(ctx).find((c) => c.action.id === id) ?? null;
+    const listed = candidates(ctx).find((c) => c.action.id === id);
+    if (listed) return listed;
+    // A terrain option names the tile it leads to. Part-way there the list has moved on (the view scrolled,
+    // or the player is now standing in that grass), so the walk carries on to the same tile.
+    const m = id.match(/^terrain:\w+:(-?\d+),(-?\d+)@(\d+)$/);
+    return m && +m[3] === gs.mapId ? tileCandidate(ctx, +m[1], +m[2]) : null;
   };
   const c = find();
   if (!c) return { status: 'failed', message: id.startsWith('tile:') ? "Can't get there." : "That isn't possible any more." };

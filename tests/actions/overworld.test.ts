@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { listActions, runAction, tileAction } from '../../src/actions/index.js';
 import { hasFixture, boot } from '../helpers/rom.js';
+import { detectMode } from '../../src/game/mode.js';
 
 const POSITIONAL = ['door', 'interact', 'go'];
 
@@ -159,5 +160,84 @@ describe.skipIf(!hasFixture('fx-pallet'))('the START menu’s entries, said dire
   });
   it('the Pokémon list is only offered once there is a Pokémon', () => {
     expect(listActions(boot('fx-pallet')).some((a) => a.id === 'startmenu:POKéMON')).toBe(false);
+  });
+});
+
+/** Route 1, standing in the tall grass just after running from the wild battle in fx-wild. */
+function onRoute1() {
+  const ctx = boot('fx-wild');
+  for (let i = 0; i < 8 && detectMode(ctx) !== 'overworld'; i++) {
+    const acts = listActions(ctx);
+    runAction(ctx, (acts.find((a) => a.id === 'run') ?? acts.find((a) => a.id === 'text:next') ?? acts[0]).id);
+  }
+  return ctx;
+}
+const onGrass = (ctx: ReturnType<typeof boot>) => buildGrid(ctx.emu, ctx.rom, ctx.gs).grass(ctx.gs.x, ctx.gs.y);
+
+describe.skipIf(!hasFixture('fx-wild'))('terrain: what the player can see but the game does not name', () => {
+  it('standing in tall grass, offers leaving it and the other patch in view', () => {
+    const ctx = onRoute1();
+    expect(detectMode(ctx)).toBe('overworld');
+    expect(onGrass(ctx)).toBe(true);
+    const acts = listActions(ctx);
+    const leave = acts.find((a) => a.id.startsWith('terrain:clear:'))!;
+    expect(leave.label).toBe('Leave the tall grass');
+    const into = acts.filter((a) => a.id.startsWith('terrain:grass:'));
+    // two other patches are on screen (up to the left and up to the right); the one the player stands in is not offered
+    expect(into.map((a) => a.label).sort()).toEqual(['Walk into the tall grass to the north-east', 'Walk into the tall grass to the north-west']);
+    // plain "the grass" should mean the nearest one, so the model is told which that is
+    const nearest = [...into].sort((a, b) => a.distance! - b.distance!)[0];
+    expect(nearest.hint).toMatch(/NEAREST tall grass/);
+    expect(into.filter((a) => /NEAREST/.test(a.hint!))).toHaveLength(1);
+    const g = buildGrid(ctx.emu, ctx.rom, ctx.gs);
+    for (const a of into) {
+      expect(g.grass(a.at!.x, a.at!.y)).toBe(true);
+      expect(a.hint).toMatch(/wild Pokémon/);
+      expect(a.hint).toMatch(/above of the player, \d+ steps? away/);
+    }
+  });
+
+  it('"leave the tall grass" ends on open ground, and "walk into the tall grass" ends in it (or in the battle it started)', () => {
+    const ctx = onRoute1();
+    const leave = listActions(ctx).find((a) => a.id.startsWith('terrain:clear:'))!;
+    expect(runAction(ctx, leave.id).status).toBe('done');
+    expect(onGrass(ctx)).toBe(false);
+    const acts = listActions(ctx);
+    expect(acts.some((a) => a.id.startsWith('terrain:clear:'))).toBe(false);   // nothing to leave now
+    const into = acts.filter((a) => a.id.startsWith('terrain:grass:'));
+    expect(into.length).toBeGreaterThanOrEqual(1);
+    expect(new Set(into.map((a) => a.label)).size).toBe(into.length);          // told apart by direction
+    into.sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0));
+    runAction(ctx, into[0].id);
+    expect(detectMode(ctx) === 'battle' || onGrass(ctx)).toBe(true);
+  });
+
+  it('only offers terrain that is on the screen', () => {
+    const ctx = onRoute1();
+    const { x: px, y: py } = ctx.gs;
+    for (const a of listActions(ctx).filter((x) => x.id.startsWith('terrain:'))) {
+      expect(a.at!.x).toBeGreaterThanOrEqual(px - 4); expect(a.at!.x).toBeLessThanOrEqual(px + 5);
+      expect(a.at!.y).toBeGreaterThanOrEqual(py - 4); expect(a.at!.y).toBeLessThanOrEqual(py + 4);
+    }
+  });
+});
+
+describe.skipIf(!hasFixture('fx-bedroom'))('terrain indoors', () => {
+  it('a bedroom has no grass or water to offer', () => {
+    expect(listActions(boot('fx-bedroom')).some((a) => a.id.startsWith('terrain:'))).toBe(false);
+  });
+});
+
+describe.skipIf(!hasFixture('fx-pallet'))('terrain: water', () => {
+  it('offers the pond once it is on screen, and walks to its edge facing it', () => {
+    const ctx = boot('fx-pallet');
+    expect(listActions(ctx).some((a) => a.id.startsWith('terrain:water:'))).toBe(false);   // not in view from the start
+    expect(runAction(ctx, 'tile:8,12').status).toBe('done');
+    const water = listActions(ctx).find((a) => a.id.startsWith('terrain:water:'))!;
+    expect(water.label).toBe('Go to the water');
+    expect(runAction(ctx, water.id).status).toBe('done');
+    const g = buildGrid(ctx.emu, ctx.rom, ctx.gs);
+    const [dx, dy] = ({ up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] } as Record<string, number[]>)[ctx.gs.facing];
+    expect(g.water(ctx.gs.x + dx, ctx.gs.y + dy)).toBe(true);
   });
 });

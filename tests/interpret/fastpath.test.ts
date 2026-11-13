@@ -73,4 +73,25 @@ describe('fastPath: movement however it is phrased', () => {
     for (const t of ['what happens if I stop the evolution of my pokemon', 'nonstop', 'stopwatch', 'walk left', ''])
       expect(isStop(t), t).toBe(false);
   });
+
+  const walking = (id: string) => id.startsWith('steps:');
+  it('"keep going" means walk that way until something is in the way', () => {
+    const UNTIL = 20;
+    for (const [said, dir] of [['keep going north', 'up'], ['Keep going forward, north.', 'up'], ['continue south', 'down'], ['keep walking left', 'left'],
+      ['carry on east', 'right'], ['keep going to the right', 'right'], ['all the way down', 'down'], ['go north until something is in the way', 'up']] as const)
+      expect(fastPath(said, walking, false), said).toEqual({ kind: 'run', id: `steps:${dir}`, arg: UNTIL });
+  });
+  it('"forward" is the way the player is facing; "keep going" with no direction is forward until blocked', () => {
+    for (const said of ['keep going', "Let's continue forward.", 'keep going forward', 'carry on', 'keep walking', 'go straight ahead until you hit something'])
+      expect(fastPath(said, walking, false), said).toEqual({ kind: 'run', id: 'steps:forward', arg: 20 });
+    expect(fastPath('forward', walking, false)).toEqual({ kind: 'run', id: 'steps:forward', arg: 1 });
+    expect(fastPath('go forward three steps', walking, false)).toEqual({ kind: 'run', id: 'steps:forward', arg: 3 });
+    expect(fastPath('two steps ahead', walking, false)).toEqual({ kind: 'run', id: 'steps:forward', arg: 2 });
+  });
+  it('"continue" alone still means the next line of text when there is one', () => {
+    const talking = (id: string) => id === 'text:next';
+    expect(fastPath('continue', talking, false)).toEqual({ kind: 'run', id: 'text:next' });
+    expect(fastPath('continue', walking, false)).toEqual({ kind: 'run', id: 'steps:forward', arg: 20 });
+    expect(fastPath('keep going', () => false, false)).toBeNull();   // not free to walk: nothing to do
+  });
 });
