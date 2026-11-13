@@ -241,3 +241,22 @@ describe.skipIf(!hasFixture('fx-pallet'))('terrain: water', () => {
     expect(g.water(ctx.gs.x + dx, ctx.gs.y + dy)).toBe(true);
   });
 });
+
+describe.skipIf(!hasFixture('fx-lab'))('going around a person', () => {
+  it('offers walking past each person close by, to the far side of them', () => {
+    const ctx = boot('fx-lab');
+    const past = listActions(ctx).filter((a) => a.id.startsWith('terrain:past:'));
+    const rival = past.find((a) => /Rival/.test(a.label))!;
+    expect(rival.label).toBe('Go around Rival1');
+    expect(rival.hint).toMatch(/without talking/);
+    expect(rival.at).toEqual({ x: 3, y: 3 });     // the square beyond the rival, who is at (4,3) with the player at (5,3)
+    expect(past.some((a) => /Poké Ball|Pokédex/.test(a.label))).toBe(false);   // only people
+  });
+  it('"go around the rival" ends on the far side of him without starting a conversation', () => {
+    const ctx = boot('fx-lab');
+    const rival = listActions(ctx).find((a) => a.id.startsWith('terrain:past:') && /Rival/.test(a.label))!;
+    expect(runAction(ctx, rival.id).status).toBe('done');
+    expect([ctx.gs.x, ctx.gs.y]).toEqual([3, 3]);
+    expect(ctx.gs.screen().hasTextBox).toBe(false);
+  });
+});

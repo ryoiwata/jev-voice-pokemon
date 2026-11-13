@@ -74,3 +74,33 @@ describe.skipIf(!hasFixture('fx-bedroom'))('stepping forward', () => {
   });
 });
 });
+
+describe.skipIf(!hasFixture('fx-lab'))('walking in a direction goes around a person in the way', () => {
+  // Oak's lab: the player is at (5,3), the rival stands at (4,3) directly to the left, Oak at (5,2) directly above.
+  it('"left two" ends two squares to the left, having walked around the rival', () => {
+    const ctx = boot('fx-lab');
+    expect([ctx.gs.x, ctx.gs.y]).toEqual([5, 3]);
+    const r = runAction(ctx, 'steps:left', 2);
+    expect(r).toEqual({ status: 'done', message: 'Walked 2 steps left, going around someone in the way.' });
+    expect([ctx.gs.x, ctx.gs.y]).toEqual([3, 3]);
+  });
+  it('one step into a person is not turned into a walk around them', () => {
+    const ctx = boot('fx-lab');
+    const r = runAction(ctx, 'steps:left', 1);
+    expect(r.status).toBe('interrupted');
+    expect(r.message).toMatch(/in the way/);
+    expect([ctx.gs.x, ctx.gs.y]).toEqual([5, 3]);
+  });
+  it('"keep going left" passes the rival and carries on to the wall', () => {
+    const ctx = boot('fx-lab');
+    const r = runAction(ctx, 'steps:left', 20);
+    expect(r.status).toBe('done');
+    expect([ctx.gs.x, ctx.gs.y]).toEqual([0, 3]);
+    expect(r.message).toMatch(/as far as it goes/);
+  });
+  it('never talks to the person or opens anything on the way round', () => {
+    const ctx = boot('fx-lab');
+    runAction(ctx, 'steps:left', 2);
+    expect(ctx.gs.screen().hasTextBox).toBe(false);
+  });
+});

@@ -165,6 +165,17 @@ function candidates(ctx: Ctx): Candidate[] {
     const who = obj?.item == null && !OBJECTS[name] ? PEOPLE[name] : undefined;
     // lead with what the player would call them ("the man"); the game's own name for the sprite comes second
     add({ id: `npc:${sp.index}@${gs.mapId}`, kind: 'interact', label, ...(who ? { hint: `Talk to ${who} (a person; the game calls this one ${pretty(obj?.trainerClass ?? name)})${obj?.trainer ? ', who may challenge you to a battle' : ''}` } : {}), at: { x: sp.x, y: sp.y } }, { kind: 'npc', index: sp.index, x: sp.x, y: sp.y, talk: !boulder }, path);
+    // Close by, a person can also be walked round: "get around the boy", "walk past him".
+    const d = Math.abs(sp.x - px) + Math.abs(sp.y - py);
+    if (label.startsWith('Talk to') && d >= 1 && d <= 4) {
+      const ax = sp.x - px, ay = sp.y - py;
+      const bx = Math.abs(ax) >= Math.abs(ay) ? sp.x + Math.sign(ax) : sp.x, by = Math.abs(ax) >= Math.abs(ay) ? sp.y : sp.y + Math.sign(ay);
+      if (g.walkable(bx, by) && !blocked.has(`${bx},${by}`)) {
+        const round = findPath(g, px, py, (x, y) => x === bx && y === by, { blocked, surf, maxNodes: 2000 });
+        const called = pretty(obj?.trainerClass ?? name);
+        if (round && round.length <= 12) add({ id: `terrain:past:${bx},${by}@${gs.mapId}`, kind: 'go', label: `Go around ${called}`, hint: `Go around ${who ?? called}: walk past this person to the far side of them, without talking to them ("get around the boy", "walk past him", "get by her")`, at: { x: bx, y: by } }, { kind: 'tile', x: bx, y: by }, round);
+      }
+    }
   }
 
   for (const sg of md?.signs ?? []) {
@@ -450,7 +461,7 @@ export function runOverworld(ctx: Ctx, id: string): ActionResult {
     if (id.startsWith('tile:')) { const [x, y] = id.slice(5).split(',').map(Number); return Number.isInteger(x) && Number.isInteger(y) ? tileCandidate(ctx, x, y) : null; }
     const listed = candidates(ctx).find((c) => c.action.id === id);
     if (listed) return listed;
-    // A terrain option names the tile it leads to. Part-way there the list has moved on (the view scrolled,
+    // A terrain option (grass, water, the far side of a person) names the tile it leads to. Part-way there the list has moved on (the view scrolled,
     // or the player is now standing in that grass), so the walk carries on to the same tile.
     const m = id.match(/^terrain:\w+:(-?\d+),(-?\d+)@(\d+)$/);
     return m && +m[3] === gs.mapId ? tileCandidate(ctx, +m[1], +m[2]) : null;
