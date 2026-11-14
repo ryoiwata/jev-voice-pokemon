@@ -115,7 +115,7 @@ Adding Pokémon and move names to Wispr Flow's dictionary improves how they are 
 
 When you ask a question ("what is Onix weak to?"), the answer is read aloud as it arrives, a sentence at a time. The game's music dips while it talks.
 
-- With `CARTESIA_API_KEY` in `.env`, [Cartesia](https://cartesia.ai) speaks each sentence. Each sentence of the answer is sent to Cartesia. `CARTESIA_VOICE` picks a voice by id (default: Quentin, a measured narrator) and `CARTESIA_MODEL` the model (default `sonic-3.6`).
+- With `CARTESIA_API_KEY` in `.env`, [Cartesia](https://cartesia.ai) speaks each sentence. Each sentence of the answer is sent to Cartesia. `CARTESIA_VOICE` picks a voice by id (default: Trevor, a deep, elderly voice) and `CARTESIA_MODEL` the model (default `sonic-3.6`).
 - Without a key, on a Mac the server speaks with the Mac's own voice (`say`). Nothing is sent anywhere and no key is needed. `SPEAK_VOICE` picks another installed voice (default `Daniel`).
 - Otherwise the page reads the answer with the browser's own voice.
 - Only your own questions are spoken, not an AI agent's, and not command results.

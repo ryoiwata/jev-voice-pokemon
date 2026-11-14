@@ -84,8 +84,8 @@ type Fetch = (url: string, init: RequestInit) => Promise<Response>;
  * The page plays them as they are.
  */
 export class CartesiaSpeaker implements SpeakerLike {
-  /** "Quentin": a measured, even narrator */
-  static readonly DEFAULT_VOICE = '5568a7df-e5ab-4442-9fae-2e9ba1b15ad8';
+  /** "Trevor": a deep, elderly, professor-like voice */
+  static readonly DEFAULT_VOICE = 'c45bc5ec-dc68-4feb-8829-6e6b2748095d';
   static readonly API_VERSION = '2026-08-14';
   readonly voice: string;
   readonly model: string;
