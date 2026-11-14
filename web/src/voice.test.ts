@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { crush, VoicePlayer, SPEAKING_TAIL_MS, type AudioContextLike } from './voice';
+import { VoicePlayer, SPEAKING_TAIL_MS, type AudioContextLike } from './voice';
 
 /** Just enough of an AudioContext to see what the player schedules. */
 function fakeCtx() {
@@ -18,9 +18,9 @@ function fakeCtx() {
       sources.push(s);
       return s;
     },
-    createGain: node, createBiquadFilter: node, createOscillator: node,
+    createGain: node, createBiquadFilter: vi.fn(node), createOscillator: vi.fn(node),
   };
-  return { ctx: ctx as unknown as AudioContextLike, sources };
+  return { ctx: ctx as unknown as AudioContextLike, sources, made: ctx };
 }
 const clip = (n: number) => new Int16Array(n);
 
@@ -32,9 +32,12 @@ beforeEach(() => {
 });
 const endAll = () => f.sources.forEach((s) => s.end());
 
-describe('crush', () => {
-  it('holds every nth sample', () => expect(Array.from(crush(Int16Array.of(32767, 0, -32768, 0), 2))).toEqual([32767 / 32768, 32767 / 32768, -1, -1]));
-  it('leaves the sound alone at 1', () => expect(Array.from(crush(Int16Array.of(16384, -16384), 1))).toEqual([0.5, -0.5]));
+describe('the voice itself', () => {
+  it('plays as it is, with no robotic effect', () => {
+    p.push(clip(100));
+    expect(f.made.createOscillator).not.toHaveBeenCalled();
+    expect(f.made.createBiquadFilter).not.toHaveBeenCalled();
+  });
 });
 
 describe('VoicePlayer', () => {

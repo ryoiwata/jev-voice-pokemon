@@ -50,8 +50,8 @@ export class MacSpeaker implements SpeakerLike {
   private run: Runner;
 
   constructor(opts: { voice?: string; timeoutMs?: number; run?: Runner } = {}) {
-    const asked = opts.voice ?? process.env.SPEAK_VOICE ?? 'Fred';
-    this.voice = /^[A-Za-z][A-Za-z ()]{0,39}$/.test(asked) ? asked : 'Fred';
+    const asked = opts.voice ?? process.env.SPEAK_VOICE ?? 'Daniel';
+    this.voice = /^[A-Za-z][A-Za-z ()]{0,39}$/.test(asked) ? asked : 'Daniel';
     this.timeoutMs = opts.timeoutMs ?? 5000;
     this.run = opts.run ?? runProgram;
   }
@@ -81,10 +81,10 @@ type Fetch = (url: string, init: RequestInit) => Promise<Response>;
 
 /**
  * Speaks with Cartesia's cloud voices. The sentence is sent to Cartesia; raw samples come back.
- * The page adds the Pokédex effect on top, as it does for the Mac voice.
+ * The page plays them as they are.
  */
 export class CartesiaSpeaker implements SpeakerLike {
-  /** "Quentin": a measured, even narrator, which suits an encyclopedia once the effect is on */
+  /** "Quentin": a measured, even narrator */
   static readonly DEFAULT_VOICE = '5568a7df-e5ab-4442-9fae-2e9ba1b15ad8';
   static readonly API_VERSION = '2026-08-14';
   readonly voice: string;

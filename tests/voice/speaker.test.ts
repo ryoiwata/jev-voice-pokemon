@@ -36,7 +36,7 @@ describe('MacSpeaker', () => {
     const sp = new MacSpeaker({ run: async (file, args, input) => { calls.push({ file, args, input }); fs.writeFileSync(outOf(args), makeWav([5])); } });
     expect(Array.from((await sp.speak('-v Bad hi'))!)).toEqual([5]);
     expect(calls[0].file).toBe('say');
-    expect(calls[0].args).toEqual(['-v', 'Fred', '-f', '-', '-o', expect.stringMatching(/\.wav$/), '--data-format=LEI16@22050']);
+    expect(calls[0].args).toEqual(['-v', 'Daniel', '-f', '-', '-o', expect.stringMatching(/\.wav$/), '--data-format=LEI16@22050']);
     expect(calls[0].input).toBe('-v Bad hi');
     expect(fs.existsSync(outOf(calls[0].args))).toBe(false);
   });
@@ -51,7 +51,7 @@ describe('MacSpeaker', () => {
     expect(await sp.speak('hi')).toBeNull();
   });
   it('ignores a voice name that is not plain words', () => {
-    expect(new MacSpeaker({ voice: 'Fred; rm -rf' }).voice).toBe('Fred');
+    expect(new MacSpeaker({ voice: 'Fred; rm -rf' }).voice).toBe('Daniel');
     expect(new MacSpeaker({ voice: 'Good News' }).voice).toBe('Good News');
   });
 });
