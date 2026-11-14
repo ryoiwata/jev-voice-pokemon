@@ -77,7 +77,63 @@ export class MacSpeaker implements SpeakerLike {
   }
 }
 
-/** The Mac's voice when this machine has one, otherwise null (the page then uses the browser's voice). */
-export function findSpeaker(): SpeakerLike | null {
+type Fetch = (url: string, init: RequestInit) => Promise<Response>;
+
+/**
+ * Speaks with Cartesia's cloud voices. The sentence is sent to Cartesia; raw samples come back.
+ * The page adds the Pokédex effect on top, as it does for the Mac voice.
+ */
+export class CartesiaSpeaker implements SpeakerLike {
+  /** "Quentin": a measured, even narrator, which suits an encyclopedia once the effect is on */
+  static readonly DEFAULT_VOICE = '5568a7df-e5ab-4442-9fae-2e9ba1b15ad8';
+  static readonly API_VERSION = '2026-08-14';
+  readonly voice: string;
+  readonly model: string;
+  private apiKey: string;
+  private timeoutMs: number;
+  private fetch: Fetch;
+
+  constructor(opts: { apiKey: string; voice?: string; model?: string; timeoutMs?: number; fetch?: Fetch }) {
+    this.apiKey = opts.apiKey;
+    const voice = opts.voice ?? process.env.CARTESIA_VOICE ?? '';
+    this.voice = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(voice) ? voice : CartesiaSpeaker.DEFAULT_VOICE;
+    this.model = opts.model ?? (process.env.CARTESIA_MODEL || 'sonic-3.6');
+    this.timeoutMs = opts.timeoutMs ?? 5000;
+    this.fetch = opts.fetch ?? ((url, init) => fetch(url, init));
+  }
+
+  async speak(text: string): Promise<Int16Array | null> {
+    try {
+      const res = await this.fetch('https://api.cartesia.ai/tts/bytes', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${this.apiKey}`, 'Cartesia-Version': CartesiaSpeaker.API_VERSION, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model_id: this.model, transcript: text, voice: { id: this.voice }, language: 'en',
+          output_format: { container: 'raw', encoding: 'pcm_s16le', sample_rate: VOICE_RATE },
+        }),
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
+      if (!res.ok) {
+        const why = (await res.text().catch(() => '')).slice(0, 200).split(this.apiKey).join('…');
+        throw new Error(`Cartesia said ${res.status}${why ? `: ${why}` : ''}`);
+      }
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      const out = new Int16Array(bytes.length >> 1);
+      for (let i = 0; i < out.length; i++) out[i] = v.getInt16(i * 2, true);
+      return out;
+    } catch (e) {
+      console.error(`[voice] ${(e as Error).message.split(this.apiKey).join('…')}`);
+      return null;
+    }
+  }
+}
+
+/**
+ * What speaks answers: Cartesia when CARTESIA_API_KEY is set, otherwise the Mac's own voice, otherwise
+ * null (the page then uses the browser's voice).
+ */
+export function findSpeaker(env: Record<string, string | undefined> = process.env): SpeakerLike | null {
+  if (env.CARTESIA_API_KEY) return new CartesiaSpeaker({ apiKey: env.CARTESIA_API_KEY });
   return process.platform === 'darwin' && fs.existsSync('/usr/bin/say') ? new MacSpeaker() : null;
 }

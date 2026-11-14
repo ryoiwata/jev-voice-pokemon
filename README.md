@@ -115,8 +115,9 @@ Adding Pokémon and move names to Wispr Flow's dictionary improves how they are 
 
 When you ask a question ("what is Onix weak to?"), the answer is read aloud in a robotic, Pokédex-style voice as it arrives, a sentence at a time. The game's music dips while it talks.
 
-- On a Mac, the server speaks with the Mac's own voice (`say`), and the page adds the effect. Nothing is sent anywhere new and no key is needed. Set `SPEAK_VOICE` in `.env` to use another installed voice (default `Fred`).
-- On other computers, the page reads the answer with the browser's own voice, without the effect.
+- With `CARTESIA_API_KEY` in `.env`, [Cartesia](https://cartesia.ai) speaks each sentence and the page adds the effect. Each sentence of the answer is sent to Cartesia. `CARTESIA_VOICE` picks a voice by id (default: Quentin, a measured narrator) and `CARTESIA_MODEL` the model (default `sonic-3.6`).
+- Without a key, on a Mac the server speaks with the Mac's own voice (`say`), with the same effect. Nothing is sent anywhere and no key is needed. `SPEAK_VOICE` picks another installed voice (default `Fred`).
+- Otherwise the page reads the answer with the browser's own voice, without the effect.
 - Only your own questions are spoken, not an AI agent's, and not command results.
 - Saying "stop", typing it, `Esc`, or the Stop button silences it at once.
 - In Voice mode, anything dictated while the voice is talking (and for 1.5 seconds after) is dropped, in case dictation heard the voice through your speakers. "Stop" always goes through. Headphones avoid the problem entirely.

@@ -8,7 +8,7 @@ import { GameClient } from './game.js';
 import { Rom } from '../game/rom.js';
 import { Pics } from '../game/pics.js';
 import { parseClientMsg, TAG_FRAME, TAG_AUDIO, voiceClip, type LogEntry, type ServerMsg } from './wire.js';
-import { findSpeaker, MacSpeaker } from '../voice/speaker.js';
+import { findSpeaker, MacSpeaker, CartesiaSpeaker } from '../voice/speaker.js';
 import { Session } from './session.js';
 import { Answerer } from '../answer/answerer.js';
 import { handleMcp } from './mcp.js';
@@ -140,7 +140,7 @@ export async function startServer(opts: ServerOpts): Promise<{ game: GameClient;
   return {
     game, session, url: `http://127.0.0.1:${port}`,
     /** what speaks answers: the Mac voice's name, or the browser's voice */
-    voice: speaker instanceof MacSpeaker ? `Mac voice "${speaker.voice}"` : "the browser's voice",
+    voice: speaker instanceof CartesiaSpeaker ? `Cartesia (voice ${speaker.voice}, ${speaker.model})` : speaker instanceof MacSpeaker ? `Mac voice "${speaker.voice}"` : "the browser's voice",
     async close() {
       for (const ws of sockets) ws.terminate();
       await new Promise((r) => server.close(r));
