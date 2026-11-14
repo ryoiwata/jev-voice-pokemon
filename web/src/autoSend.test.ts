@@ -69,6 +69,15 @@ describe('AutoSender', () => {
       expect(sent).toEqual([]);
       expect(dropped).toEqual(['go north']);
     });
+    it('drops text that arrived while the voice talked, even when the voice is done before the delay is up', () => {
+      let talking = true; const sent: string[] = [], dropped: string[] = [];
+      const a = new AutoSender((t) => sent.push(t), stop, () => talking, (t) => dropped.push(t));
+      a.update('go north', 2000, true);
+      talking = false;
+      vi.advanceTimersByTime(2000);
+      expect(sent).toEqual([]);
+      expect(dropped).toEqual(['go north']);
+    });
     it('still sends a dictated stop at once', () => {
       const sent: string[] = [];
       const a = new AutoSender((t) => sent.push(t), stop, () => true, () => {});

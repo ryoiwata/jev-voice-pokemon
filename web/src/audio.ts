@@ -1,9 +1,9 @@
 import { AUDIO_RATE } from '../../src/server/wire';
 
 const LEAD = 0.05;      // seconds of safety when starting after silence
-const MAX_AHEAD = 0.4;
+const MAX_AHEAD = 0.4;  // never queue more than this (keeps sound close to the picture)
 /** How loud the game stays while a spoken answer plays. */
-export const DUCK_LEVEL = 0.3;  // never queue more than this (keeps sound close to the picture)
+export const DUCK_LEVEL = 0.3;
 
 /** When the next chunk should start playing, or null to drop it because too much is queued already. */
 export function nextStart(now: number, lastEnd: number): number | null {

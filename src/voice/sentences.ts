@@ -3,8 +3,9 @@
 /** Answer text cleaned for speaking: no game arrows, markdown, or `say` commands ("[[volm 0]]"). */
 export function speechText(s: string): string {
   return s
-    .replace(/\[\[|\]\]/g, ' ')
     .replace(/[▼*_`#]/g, '')
+    // every bracket goes, so no "[[" can be left or rebuilt for `say` to obey
+    .replace(/[[\]]/g, ' ')
     .replace(/\bLv\.? ?(\d)/g, 'level $1')
     .replace(/\s+/g, ' ')
     .trim();
@@ -48,8 +49,10 @@ export class SentenceCutter {
 
   /** The rest of the final answer. If it is not what streamed (a refusal, a failure), all of it, with `replaced`. */
   finish(final: string): { sentences: string[]; replaced: boolean } {
-    const replaced = this.done.trim() !== '' && !final.startsWith(this.done);
-    const from = replaced ? 0 : this.done.length;
+    // the final answer is trimmed, so what streamed is compared without its leading blank space
+    const done = this.done.trimStart();
+    const replaced = done.trim() !== '' && !final.startsWith(done);
+    const from = replaced ? 0 : done.length;
     const { sentences, next } = cut(final, from);
     const tail = speechText(final.slice(next));
     this.done = final;

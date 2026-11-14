@@ -4,6 +4,10 @@ import { speechText, SentenceCutter } from '../../src/voice/sentences.js';
 describe('speechText', () => {
   it('reads levels as words', () => expect(speechText('Pikachu Lv12 and Onix Lv. 14')).toBe('Pikachu level 12 and Onix level 14'));
   it('drops game arrows, markdown and say commands', () => expect(speechText('**Use** [[volm 0]] Bubble▼')).toBe('Use volm 0 Bubble'));
+  it('cannot be tricked into leaving a say command behind', () => {
+    expect(speechText('Hi [*[slnc 3000]*] there')).not.toMatch(/\[\[|\]\]/);
+    expect(speechText('Hi [[[slnc 3000]]] there')).not.toMatch(/\[\[|\]\]/);
+  });
 });
 
 describe('SentenceCutter', () => {
@@ -22,6 +26,11 @@ describe('SentenceCutter', () => {
     const c = new SentenceCutter();
     c.push('Here is how to. Then');
     expect(c.finish("I can't answer that one.")).toEqual({ sentences: ["I can't answer that one."], replaced: true });
+  });
+  it('does not read the start again when the stream began with a blank line', () => {
+    const c = new SentenceCutter();
+    expect(c.push('\nOnix is weak to Water. Use')).toEqual(['Onix is weak to Water.']);
+    expect(c.finish('Onix is weak to Water. Use Bubble.')).toEqual({ sentences: ['Use Bubble.'], replaced: false });
   });
   it('speaks a fixed reply that never streamed', () => expect(new SentenceCutter().finish("Couldn't get an answer just now.")).toEqual({ sentences: ["Couldn't get an answer just now."], replaced: false }));
   it('skips empty pieces', () => expect(new SentenceCutter().finish('  ')).toEqual({ sentences: [], replaced: false }));
