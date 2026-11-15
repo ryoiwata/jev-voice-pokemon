@@ -45,7 +45,7 @@ export function listMenu(ctx: Ctx): Action[] {
   } else {
     // Text, or a full-screen page such as a Pokédex entry. Some of these wait for A without showing the ▼ prompt,
     // so anything on screen without a cursor can be continued.
-    out.push({ id: 'text:next', kind: 'text', label: 'Continue' });
+    out.push({ id: 'text:next', kind: 'text', label: 'Continue', hint: 'Continue: show the next text on screen ("next", "okay", "go on", "skip this")' });
   }
   return out;
 }

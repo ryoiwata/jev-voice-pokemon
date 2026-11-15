@@ -13,3 +13,24 @@ please ok okay um uh hmm well yeah yes no thanks thank think guess say said try
 export function nameWords(said: string): string[] {
   return said.replace(/[’']/g, '').split(/[^A-Za-z]+/).filter((w) => w && !FILLER.has(w.toLowerCase()));
 }
+
+/**
+ * The candidates Jev picks a name from: every word said (once, as said), a name spelled out letter by letter
+ * ("L E O"), and the non-filler words joined when there are several ("big joe"). Jev cannot write a name, so code
+ * offers every reading and Jev chooses.
+ */
+export function nameCandidates(said: string): string[] {
+  const words = said.replace(/[’']/g, '').split(/[^A-Za-z]+/).filter(Boolean);
+  const out: string[] = [];
+  const add = (w: string) => { if (w && !out.some((o) => o.toLowerCase() === w.toLowerCase())) out.push(w); };
+  for (const w of words) add(w);
+  for (let i = 0; i < words.length;) {
+    let j = i;
+    while (j < words.length && words[j].length === 1) j++;
+    if (j - i >= 2) add(words.slice(i, j).join('').toUpperCase());
+    i = j > i ? j : i + 1;
+  }
+  const kept = nameWords(said).filter((w, i, all) => all.findIndex((o) => o.toLowerCase() === w.toLowerCase()) === i);
+  if (kept.length > 1) add(kept.join(''));
+  return out.slice(0, 255);
+}

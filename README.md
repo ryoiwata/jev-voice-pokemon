@@ -23,7 +23,7 @@ What this fork changes: the self-playing loop, objectives and strategy are gone.
 
 Built, tested, and played with the real Jev. Two things have not been checked by a person end to end: a full voice-only run from the title screen through the first rival battle, and throwing a ball at a wild Pokémon by voice.
 
-`logs/jev-calls.jsonl` records every command, the options offered and Jev's probabilities; use it to tune `ACT_MIN_P` and `ACT_MIN_MARGIN`.
+`logs/jev-calls.jsonl` records every command, the questions asked, Jev's answers and which Jev release gave them; use it, and `npm run eval`, to tune the thresholds.
 
 ## Setup
 
@@ -129,18 +129,40 @@ When you ask a question ("what is Onix weak to?"), the answer is read aloud as i
 |---|---|
 | `JEV_MODE` | `gateway` (default): the real Jev. `mock`: a free local word-matcher. |
 | `TYPESAFE_API_KEY` | Your TypeSafe key, for the real Jev (early access). With no key, the word-matcher is used whatever the mode. |
-| `JEV_SEES_SCREEN` | `1` (default) sends Jev a picture of the game screen with each command; `0` sends only the facts. |
-| `JEV_MODEL` | `jev-latest` (default), `jev-preview`, or a pinned release such as `jev-1.14.0`. |
+| `JEV_SEES_SCREEN` | `0` (default) sends only the game's facts; `1` also sends a picture of the game screen. |
+| `JEV_MODEL` | `jev-1.14.0` (default), the release the thresholds were tuned on. `jev-latest` follows each new release, so its answers can change without warning. |
 | `ACT_MIN_P`, `ACT_MIN_MARGIN` | How sure Jev must be, and how far ahead of the runner-up, to act without asking (0.6 and 0.2). |
 | `COSTLY_MIN_P`, `COSTLY_MIN_MARGIN` | The same for hard-to-undo actions (0.85 and 0.4). |
 | `ANTHROPIC_API_KEY` | Turns on question answering. Without it everything else still works. |
 | `ANSWER_MODEL` | The Claude model for answers (default `claude-sonnet-5-5`). |
 
-With each command Jev is given the game's facts (where you are and which way you face, what is on the square on each side of you, your party with HP and moves, your bag, money, badges, any battle, the text on screen) and a picture of the screen. In trials Jev could not recognise things in Game Boy graphics (asked to find the bed, the plant or the player, it rated each "not visible"), so it is the facts and the list of options that do the work; the picture is sent for when its vision improves.
+The app calls Jev through TypeSafe's official SDK (`@typesafe-ai/sdk`). Each command is one request with three questions, all worded in `src/interpret/questions.ts` next to the thresholds they are read against:
 
-The stand-in matches your words against the names of the things on offer. It handles commands that name the thing ("walk to the Poké Ball", "use Ember") and nothing cleverer. If the real Jev is down or slow, that one command falls back to the stand-in and the log says so.
+- **Which action?** A choice among the actions possible right now, and only those.
+- **Is this a question?** A yes/no question. Above 0.7, the command is answered instead of carried out.
+- **Does any action fit?** A yes/no question. Below 0.3, the app says it can't be done from here. Above 0.7, the picked action runs if it is likely enough. In between, it runs only if the pick is very sure, and otherwise you get "Did you mean…".
 
-Jev costs $0.042 per million input tokens and output is free; a command is one call of roughly a few hundred to a few thousand tokens. A hard limit of 90 calls a minute (`JEV_MAX_PER_MIN`) caps the worst case.
+When one command needs several actions, each further step asks "has everything been done?" as a yes/no question too. On a naming screen, code lists the words you said and Jev picks the name, or says you didn't give one.
+
+With each command Jev gets only the facts that command can depend on:
+- on the map: where you are and which way you face, what is next to you, and who is in your party;
+- in a battle: the battle, your party with HP and moves, and your bag;
+- on menus and text screens: your party and your bag.
+
+The text on screen and your and your rival's names are always included. Money and badges never are. In trials (`npm run eval`, below), adding the screen picture did not improve how commands were read, so it is off.
+
+The stand-in matches your words against the names of the things on offer. It handles commands that name the thing ("walk to the Poké Ball", "use Ember") and nothing cleverer. If the real Jev is down or slow, that one command falls back to the stand-in, and both the page and the server log say so.
+
+Jev costs $0.042 per million input tokens, and output is free. A command is one call of about 1,000 to 3,000 tokens. A hard limit of 90 calls a minute (`JEV_MAX_PER_MIN`) caps the worst case.
+
+`npm run eval` checks how commands are read. It runs about 90 labelled commands against saved game states on the real Jev (it uses your `TYPESAFE_API_KEY`) and reports each one as right, safe (asked when it could have acted, or the reverse) or wrong. Cases are in `scripts/eval/cases.ts`. On November 14, 2026, three runs each gave:
+
+| Design | Right | Safe | Wrong |
+|---|---|---|---|
+| Before (one choice with "question" and "nothing fits" as options, plus the screen picture) | 75% | 18% | 7.0% |
+| Now | 83% | 12% | 4.3% |
+
+The naming screen picked the right name 30 times out of 30.
 
 ## Connecting an AI agent
 

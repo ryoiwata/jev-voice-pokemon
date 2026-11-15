@@ -164,7 +164,9 @@ function candidates(ctx: Ctx): Candidate[] {
       : `Talk to ${pretty(obj?.trainerClass ?? name)}`;
     const who = obj?.item == null && !OBJECTS[name] ? PEOPLE[name] : undefined;
     // lead with what the player would call them ("the man"); the game's own name for the sprite comes second
-    add({ id: `npc:${sp.index}@${gs.mapId}`, kind: 'interact', label, ...(who ? { hint: `Talk to ${who} (a person; the game calls this one ${pretty(obj?.trainerClass ?? name)})${obj?.trainer ? ', who may challenge you to a battle' : ''}` } : {}), at: { x: sp.x, y: sp.y } }, { kind: 'npc', index: sp.index, x: sp.x, y: sp.y, talk: !boulder }, path);
+    const hint = obj?.item != null ? 'Pick up the item ball: a Poké Ball lying on the ground with an item in it'
+      : who ? `Talk to ${who} (a person; the game calls this one ${pretty(obj?.trainerClass ?? name)})${obj?.trainer ? ', who may challenge you to a battle' : ''}` : undefined;
+    add({ id: `npc:${sp.index}@${gs.mapId}`, kind: 'interact', label, ...(hint ? { hint } : {}), at: { x: sp.x, y: sp.y } }, { kind: 'npc', index: sp.index, x: sp.x, y: sp.y, talk: !boulder }, path);
     // Close by, a person can also be walked round: "get around the boy", "walk past him".
     const d = Math.abs(sp.x - px) + Math.abs(sp.y - py);
     if (label.startsWith('Talk to') && d >= 1 && d <= 4) {

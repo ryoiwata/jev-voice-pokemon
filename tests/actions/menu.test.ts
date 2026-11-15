@@ -75,3 +75,11 @@ describe.skipIf(!hasFixture('fx-dialog'))('dialogue', () => {
     await g.shutdown();
   });
 });
+
+describe.skipIf(!hasFixture('fx-dialog'))('the model is told what "Continue" covers', () => {
+  it('says it shows the next text, the way a player would ask for it', () => {
+    const next = listActions(boot('fx-dialog')).find((a) => a.id === 'text:next')!;
+    expect(next.label).toBe('Continue');
+    expect(next.hint).toMatch(/skip/);
+  });
+});

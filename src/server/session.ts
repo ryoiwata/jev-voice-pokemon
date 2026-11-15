@@ -4,10 +4,9 @@ import { EventEmitter } from 'node:events';
 import type { Button } from '../emu/emulator.js';
 import type { Action, ActionResult } from '../actions/types.js';
 import type { GameSnapshot } from '../game/snapshot.js';
-import type { Interpreter } from '../interpret/interpreter.js';
+import type { Interpreter, Interpreted } from '../interpret/interpreter.js';
 import { fastPath, isStop } from '../interpret/fastpath.js';
 import { splitParts } from '../interpret/parts.js';
-import { nameWords } from '../interpret/name.js';
 
 const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty'];
 /** How many steps a sentence asks for: a number in it, "all the way" for as far as possible, otherwise one. */
@@ -391,27 +390,30 @@ export class Session extends EventEmitter {
     }
 
     this.dropPending();
-    // the real Jev is shown the game screen along with the facts; the stand-in cannot see, so no picture is taken for it
-    const sees = this.deps.jev === 'gateway' && process.env.JEV_SEES_SCREEN !== '0';
+    // With JEV_SEES_SCREEN=1 the real Jev also sees the game screen. Off by default: in trials (scripts/eval) the
+    // picture did not improve how commands were read and cost more tokens. The stand-in cannot see at all.
+    const sees = this.deps.jev === 'gateway' && process.env.JEV_SEES_SCREEN === '1';
     const image = sees && game.screenPng ? await game.screenPng().catch(() => undefined) : undefined;
-    const first = await interpreter.interpret(said, game.actions, game.state, { image });
+    // A naming screen has one thing to do: type a name. Jev cannot write the name, so code offers the words
+    // said and Jev picks the name among them (or says none was said, or that this is a question).
+    const naming = game.actions.find((a) => a.id === 'name');
+    const read = naming ? await interpreter.readName(said, game.state, image) : null;
+    const first: Interpreted = read
+      ? (read.kind === 'question' ? { kind: 'question', backend: read.backend, fellBack: read.fellBack } : { kind: 'nothing', reason: 'empty', backend: read.backend, fellBack: read.fellBack })
+      : await interpreter.interpret(said, game.actions, game.state, { image });
     if (superseded()) { this.log(source, 'stopped', 'Cancelled.', said); return CANCELLED; }
     const stillNo = this.refusal(source);
     if (stillNo) return stillNo;
     const note = first.fellBack ? ' (Jev unavailable, used the stand-in)' : '';
     const chooser = (i: { backend: string; fellBack: boolean }): Chooser => (i.backend === 'gateway' && !i.fellBack ? 'jev' : 'standin');
 
-    // A naming screen has one thing to do: type a name. The model can choose that but cannot write the
-    // name, so unless the player asked a question, the name is lifted from their own words.
-    const naming = game.actions.find((a) => a.id === 'name');
-    if (naming && first.kind !== 'question' && first.kind !== 'nothing') {
-      const words = nameWords(said);
-      if (!words.length) {
+    if (naming && read && read.kind !== 'question') {
+      if (read.kind === 'none') {
         const message = 'Which name? Say just the name, like "Leo".';
         this.log(source, 'failed', message, said);
         return { status: 'failed', message };
       }
-      return this.exec({ ...naming, label: `Type ${words.join('').toUpperCase()}` }, source, { text: words.join('') }, said, note, { by: chooser(first) });
+      return this.exec({ ...naming, label: `Type ${read.text.toUpperCase()}` }, source, { text: read.text }, said, note, { by: chooser(read) });
     }
     switch (first.kind) {
       case 'nothing': {
@@ -455,9 +457,9 @@ export class Session extends EventEmitter {
           // (a naming screen: the name is in the player's own words, e.g. "new name SHIGERU")
           const nowNaming = game.actions.find((a) => a.id === 'name');
           if (nowNaming && !superseded() && !this.refusal(source)) {
-            const done = new Set(first.action.label.toLowerCase().split(/[^a-z]+/));
-            const words = nameWords(said).filter((w) => !done.has(w.toLowerCase()));
-            return words.length ? this.exec({ ...nowNaming, label: `Type ${words.join('').toUpperCase()}` }, source, { text: words.join('') }, said, '', { by: chooser(first) }) : r;
+            const got = await interpreter.readName(said, game.state, undefined, first.action.label.split(/[^A-Za-z]+/));
+            if (superseded() || this.refusal(source)) return r;
+            return got.kind === 'name' ? this.exec({ ...nowNaming, label: `Type ${got.text.toUpperCase()}` }, source, { text: got.text }, said, '', { by: chooser(got) }) : r;
           }
           const again = await interpreter.interpret(said, game.actions, game.state, { strict: true, justDid: first.action.label });
           if (!superseded() && !this.refusal(source) && again.kind === 'act' && again.action.id !== first.action.id) r = await this.exec(again.action, source, undefined, said, '', { by: chooser(again), sure: again.p });

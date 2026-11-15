@@ -8,6 +8,7 @@
     "start": "vite build web && tsx src/server/main.ts",
     "typecheck": "tsc && tsc -p web",
     "test": "vitest run",
+    "eval": "tsx scripts/eval/run.ts",
     "build:web": "vite build web",
     "serve": "tsx src/server/main.ts",
     "dev": "vite web"
@@ -16,12 +17,11 @@
   "author": "Christian Mathiesen",
   "license": "GPL-2.0-or-later",
   "dependencies": {
-    "@ai-sdk/typesafe-ai": "^3.0.39",
     "@anthropic-ai/sdk": "^1.8.0",
     "@fontsource/atkinson-hyperlegible-next": "^5.3.0",
     "@fontsource/pixelify-sans": "^5.3.0",
     "@modelcontextprotocol/sdk": "^1.32.2",
-    "ai": "^7.0.171",
+    "@typesafe-ai/sdk": "^0.7.0",
     "serverboy": "^0.0.7",
     "ws": "^8.21.3",
     "zod": "^4.6.7"

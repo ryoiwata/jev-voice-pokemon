@@ -1,4 +1,8 @@
 import type { JevBackend, JevRequest, JevResult, JevAnswer } from './types.js';
+import { QID } from '../interpret/questions.js';
+
+/** How well an option must match before the stand-in counts it as fitting at all. */
+const NOTHING = 0.45;
 
 /**
  * A local stand-in for Jev: free, instant, no key. It matches the words the player said against the
@@ -76,22 +80,32 @@ export class StandinJev implements JevBackend {
     const names = (n: any) => (n && typeof n === 'object' ? [n.name, n.species] : [n]).filter(Boolean).map(String);
     const known = new Set([...party.flatMap((n) => names(n).flatMap(tokens)), ...tokens(String((req.state as any)?.justDid ?? ''))]);
     const answers: Record<string, JevAnswer> = {};
+    // the best match among the actions on offer, which also answers "does anything fit"
+    let best = 0;
     for (const [qid, q] of Object.entries(req.questions)) {
-      if (q.type === 'boolean') { answers[qid] = { type: 'boolean', probability: 0.5 }; continue; }
-      if (q.type === 'score') { answers[qid] = { type: 'score', score: 0 }; continue; }
-      if (q.type === 'box') { answers[qid] = { type: 'box', box: { top: 0, bottom: 1, left: 0, right: 1 } }; continue; } // it cannot see
+      if (q.type !== 'choice') continue;
       const raw: Record<string, number> = {};
-      for (const [key, label] of Object.entries(q.criteria)) {
-        if (key === '__question') raw[key] = QUESTION.test(said.trim().toLowerCase().replace(/[’']/g, '')) ? 1 : 0;
-        else if (key === '__impossible') raw[key] = 0.45;
-        else raw[key] = negated ? 0 : score(words, typeof label === 'string' ? label : key, known);
-      }
-      // a sharp curve: a full match should stand well clear of partial ones
-      const sum = Object.values(raw).reduce((a, s) => a + s ** 6, 0) || 1;
+      for (const [key, label] of Object.entries(q.criteria)) raw[key] = negated ? 0 : score(words, typeof label === 'string' ? label : key, known);
+      best = Math.max(best, ...Object.values(raw));
+      // A sharp curve: a full match should stand well clear of partial ones. NOTHING is the weight held back for
+      // "none of these", so a weak partial match is never reported as a sure one.
+      const sum = Object.values(raw).reduce((a, s) => a + s ** 6, NOTHING ** 6);
       const probabilities: Record<string, number> = {};
       for (const [k, s] of Object.entries(raw)) probabilities[k] = s ** 6 / sum;
       const choice = Object.entries(probabilities).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
       answers[qid] = { type: 'choice', choice, probabilities };
+    }
+    for (const [qid, q] of Object.entries(req.questions)) {
+      if (q.type === 'score') answers[qid] = { type: 'score', score: 0 };
+      else if (q.type === 'box') answers[qid] = { type: 'box', box: { top: 0, bottom: 1, left: 0, right: 1 } }; // it cannot see
+      else if (q.type === 'noul') {
+        // it knows three of the app's yes/no questions by their ids, and is unsure of anything else
+        const p = qid === QID.asking ? (QUESTION.test(said.trim().toLowerCase().replace(/[’']/g, '')) ? 1 : 0)
+          : qid === QID.fits ? (best > NOTHING ? 1 : 0)
+          : qid === QID.done ? 1
+          : 0.5;
+        answers[qid] = { type: 'noul', noul: p };
+      }
     }
     return { answers, usage: { inputTokens: 0, outputTokens: 0 } };
   }

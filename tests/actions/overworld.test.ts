@@ -260,3 +260,10 @@ describe.skipIf(!hasFixture('fx-lab'))('going around a person', () => {
     expect(ctx.gs.screen().hasTextBox).toBe(false);
   });
 });
+
+describe.skipIf(!hasFixture('fx-forest'))('the model is told what an item ball looks like', () => {
+  it('describes it as a Poké Ball lying on the ground', () => {
+    const ball = listActions(boot('fx-forest')).find((a) => a.label === 'Pick up the item ball')!;
+    expect(ball.hint).toMatch(/Poké Ball lying on the ground/);
+  });
+});

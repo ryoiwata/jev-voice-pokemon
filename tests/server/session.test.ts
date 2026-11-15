@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { onTestFinished } from 'vitest';
 import { Session, type GameLike } from '../../src/server/session.js';
 import { Interpreter } from '../../src/interpret/interpreter.js';
 import { Jev } from '../../src/jev/client.js';
@@ -51,6 +52,13 @@ beforeEach(() => {
   logs = [];
   s.on('log', (e: LogEntry) => { const i = logs.findIndex((x) => x.id === e.id); if (i >= 0) logs[i] = { ...e }; else logs.push({ ...e }); });
 });
+
+/** The real model's answers to a command: the pick with its probabilities, and the yes/no questions it was asked. */
+function jevSays(req: any, choice: string, probabilities: Record<string, number>, nouls: { asking?: number; fits?: number; done?: number } = {}): any {
+  const answers: any = { intent: { type: 'choice', choice, probabilities } };
+  for (const [k, v] of Object.entries({ asking: 0.02, fits: 0.95, done: 0.05, ...nouls })) if (req.questions[k]) answers[k] = { type: 'noul', noul: v };
+  return { answers, usage: {} };
+}
 
 describe('Session: commands', () => {
   it('runs a clear command without asking and logs what it heard and did', async () => {
@@ -494,7 +502,9 @@ describe('Session: movement, names in a follow-up, and saying what is possible',
   it('"let’s name him Shigeru" on the name menu chooses NEW NAME, then types the name', async () => {
     const NAME_MENU = [A('menu:NEW NAME', 'NEW NAME', { kind: 'menu' }), A('menu:BLUE', 'BLUE', { kind: 'menu' }), A('menu:GARY', 'GARY', { kind: 'menu' })];
     // the real Jev reads this sentence as "NEW NAME" (seen live at 0.86); the word-matcher cannot, so the model is played here
-    const picks: JevBackend = { name: 'gateway', evaluate: async (): Promise<any> => ({ answers: { intent: { type: 'choice', choice: 'menu:NEW NAME', probabilities: { 'menu:NEW NAME': 0.86, __impossible: 0.09 } } }, usage: {} }) };
+    const picks: JevBackend = { name: 'gateway', evaluate: async (req): Promise<any> => req.questions.name
+      ? { answers: { name: { type: 'choice', choice: 'Shigeru', probabilities: { Shigeru: 0.97 } }, saysName: { type: 'noul', noul: 0.96 }, asking: { type: 'noul', noul: 0.01 } }, usage: {} }
+      : jevSays(req, 'menu:NEW NAME', { 'menu:NEW NAME': 0.86, 'menu:BLUE': 0.09 }) };
     const g = new FakeGame();
     const sess = new Session({ game: g, interpreter: new Interpreter(new Jev({ backend: picks, logFile: null }), new StandinJev()), answerer: { enabled: false, answer: async () => '' }, jev: 'standin' });
     g.actions = NAME_MENU;
@@ -517,10 +527,21 @@ describe('Session: movement, names in a follow-up, and saying what is possible',
 });
 
 describe('Session: the real Jev is shown the screen', () => {
-  it('sends a picture of the game with the command when the real Jev is in use', async () => {
+  it('sends no picture by default: in trials it did not help', async () => {
     const g = new FakeGame();
     const seen: any[] = [];
-    const eyes: JevBackend = { name: 'gateway', evaluate: async (req): Promise<any> => { seen.push(req); return { answers: { intent: { type: 'choice', choice: 'npc:4', probabilities: { 'npc:4': 0.95 } } }, usage: {} }; } };
+    const eyes: JevBackend = { name: 'gateway', evaluate: async (req): Promise<any> => { seen.push(req); return jevSays(req, 'npc:4', { 'npc:4': 0.95 }); } };
+    (g as any).screenPng = async () => Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    const sess = new Session({ game: g, interpreter: new Interpreter(new Jev({ backend: eyes, logFile: null }), new StandinJev()), answerer: { enabled: false, answer: async () => '' }, jev: 'gateway' });
+    await sess.handleText('walk to the poke ball', 'human');
+    expect(seen[0].image).toBeUndefined();
+  });
+  it('sends a picture of the game with the command when JEV_SEES_SCREEN=1 and the real Jev is in use', async () => {
+    process.env.JEV_SEES_SCREEN = '1';
+    onTestFinished(() => { delete process.env.JEV_SEES_SCREEN; });
+    const g = new FakeGame();
+    const seen: any[] = [];
+    const eyes: JevBackend = { name: 'gateway', evaluate: async (req): Promise<any> => { seen.push(req); return jevSays(req, 'npc:4', { 'npc:4': 0.95 }); } };
     (g as any).screenPng = async () => Buffer.from([0x89, 0x50, 0x4e, 0x47]);
     const sess = new Session({ game: g, interpreter: new Interpreter(new Jev({ backend: eyes, logFile: null }), new StandinJev()), answerer: { enabled: false, answer: async () => '' }, jev: 'gateway' });
     await sess.handleText('walk to the poke ball', 'human');
@@ -549,7 +570,7 @@ describe('Session: opening a menu never picks from it', () => {
     const eager: JevBackend = { name: 'gateway', evaluate: async (req): Promise<any> => {
       const c = (req.questions.intent as any).criteria;
       const pick = c['battle:FIGHT'] ? 'battle:FIGHT' : 'menu:SCRATCH';
-      return { answers: { intent: { type: 'choice', choice: pick, probabilities: { [pick]: 0.99 } } }, usage: {} };
+      return jevSays(req, pick, { [pick]: 0.99 });
     } };
     const g = new FakeGame();
     const sess = new Session({ game: g, interpreter: new Interpreter(new Jev({ backend: eager, logFile: null }), new StandinJev()), answerer: { enabled: false, answer: async () => '' }, jev: 'standin' });
@@ -630,7 +651,8 @@ describe('Session: carrying on until the command is done', () => {
     const backend: JevBackend = { name: 'gateway', evaluate: async (req) => {
       seen.push(req.state);
       const choice = choices[Math.min(n++, choices.length - 1)];
-      return { answers: { intent: { type: 'choice', choice, probabilities: { [choice]: 0.95, __impossible: 0.05 } } }, usage: {} };
+      // '__done' scripts the model saying everything asked for has been done
+      return choice === '__done' ? jevSays(req, 'npc:4', { 'npc:4': 0.95 }, { done: 0.95 }) : jevSays(req, choice, { [choice]: 0.95 });
     } };
     const sess = new Session({ game, interpreter: new Interpreter(new Jev({ backend, logFile: null }), new StandinJev()), answerer, jev: 'gateway' });
     return { sess, seen, calls: () => n };
@@ -763,5 +785,36 @@ describe('Session: spoken answers', () => {
   it('reports whether it can speak', () => {
     expect(sp.info().speech).toBe(true);
     expect(s.info().speech).toBe(false);
+  });
+});
+
+describe('Session: Jev picks the name on a naming screen', () => {
+  const naming = (answers: any) => {
+    const g = new FakeGame();
+    const seen: any[] = [];
+    const backend: JevBackend = { name: 'gateway', evaluate: async (req): Promise<any> => { seen.push(req); return { answers, usage: {} }; } };
+    const ans = { enabled: true, answer: vi.fn(async () => 'An answer.') };
+    const sess = new Session({ game: g, interpreter: new Interpreter(new Jev({ backend, logFile: null }), new StandinJev()), answerer: ans, jev: 'gateway' });
+    g.actions = [A('name', 'Type a name', { kind: 'name' })];
+    return { g, sess, seen, ans };
+  };
+  it('types the word Jev picks, from the words that were said', async () => {
+    const { g, sess, seen } = naming({ name: { type: 'choice', choice: 'Leo', probabilities: { Leo: 0.95 } }, saysName: { type: 'noul', noul: 0.97 }, asking: { type: 'noul', noul: 0.01 } });
+    await sess.handleText("let's go with Leo", 'human');
+    expect(Object.keys(seen[0].questions.name.criteria)).toEqual(['lets', 'go', 'with', 'Leo']);
+    expect(g.ran).toEqual([{ id: 'name', arg: { text: 'Leo' } }]);
+  });
+  it('asks for the name when Jev says none was said', async () => {
+    const { g, sess } = naming({ name: { type: 'choice', choice: 'name', probabilities: { name: 0.6 } }, saysName: { type: 'noul', noul: 0.08 }, asking: { type: 'noul', noul: 0.02 } });
+    const r = await sess.handleText('type a good name', 'human');
+    expect(g.ran).toEqual([]);
+    expect(r).toEqual({ status: 'failed', message: 'Which name? Say just the name, like "Leo".' });
+  });
+  it('answers a question asked on the naming screen', async () => {
+    const { g, sess, ans } = naming({ name: { type: 'choice', choice: 'Squirtle', probabilities: { Squirtle: 0.7 } }, saysName: { type: 'noul', noul: 0.2 }, asking: { type: 'noul', noul: 0.95 } });
+    const r = await sess.handleText('what is a good name for a Squirtle?', 'human');
+    expect(g.ran).toEqual([]);
+    expect(r.status).toBe('answer');
+    expect(ans.answer).toHaveBeenCalled();
   });
 });

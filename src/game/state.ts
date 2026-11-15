@@ -64,6 +64,7 @@ export class GameState {
   }
 
   get playerName() { return decode(this.m, sym('wPlayerName'), 11); }
+  get rivalName() { return decode(this.m, sym('wRivalName'), 11); }
 
   /** Pokémon in the current PC box (species, nickname, level, types). */
   box(): { speciesId: number; species: string; nickname: string; level: number; types: string[] }[] {

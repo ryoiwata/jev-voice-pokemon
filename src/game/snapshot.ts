@@ -9,6 +9,8 @@ export interface GameSnapshot {
   mode: Mode; map: string; x: number; y: number; facing: string;
   /** the player's own name; '' before the game starts */
   playerName: string;
+  /** the rival's name; '' before the game starts */
+  rivalName?: string;
   /** the eight badges in game order (Boulder first), true when held */
   badgeList: boolean[];
   money: number; badges: number; pokedex: { seen: number; owned: number }; playTime: string;
@@ -54,6 +56,7 @@ export function snapshot(ctx: Ctx, running: GameSnapshot['running'] = null): Gam
   return {
     mode, map: started ? gs.mapName : '', x: gs.x, y: gs.y, facing: gs.facing,
     playerName: started ? gs.playerName : '',
+    rivalName: started ? gs.rivalName : '',
     badgeList: Array.from({ length: 8 }, (_, i) => started && (gs.badges & (1 << i)) !== 0),
     money: started ? gs.money : 0, badges: started ? gs.badgeCount : 0,
     pokedex: { seen: started ? countBits(emu.mem, sym('wPokedexSeen'), 19) : 0, owned: started ? countBits(emu.mem, sym('wPokedexOwned'), 19) : 0 },

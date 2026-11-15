@@ -80,15 +80,24 @@ describe('Interpreter and the Jev service', () => {
     const I = new Interpreter(new Jev({ backend: hanging, logFile: null, retries: 0 }), new StandinJev(), { timeoutMs: 50 });
     expect(await I.interpret('catch with ultra ball', acts, S)).toMatchObject({ kind: 'act', fellBack: true });
   });
-  it('sends at most 255 options, keeping the nearest', async () => {
+  it('sends at most 255 options, keeping the nearest, and only real actions', async () => {
     const many = Array.from({ length: 400 }, (_, i) => A(`sign:${i},0`, `Read sign ${i}`, { distance: i }));
     const spy = new Spy();
     await new Interpreter(new Jev({ backend: spy, logFile: null }), new StandinJev()).interpret('read sign 3', many, S);
     const criteria = (spy.last!.questions.intent as { criteria: Record<string, string> }).criteria;
-    expect(Object.keys(criteria).length).toBeLessThanOrEqual(255);
+    expect(Object.keys(criteria).length).toBe(255);
     expect(criteria['sign:3,0']).toBeDefined();
     expect(criteria['sign:399,0']).toBeUndefined();
-    expect(criteria.__question).toBeDefined();
+    expect(Object.keys(criteria).some((k) => k.startsWith('__'))).toBe(false);
+  });
+  it('asks whether it is a question and whether anything fits as yes/no questions beside the pick', async () => {
+    const spy = new Spy();
+    await new Interpreter(new Jev({ backend: spy, logFile: null }), new StandinJev()).interpret('open the menu', acts, S);
+    expect(Object.keys(spy.last!.questions).sort()).toEqual(['asking', 'fits', 'intent']);
+    expect(spy.last!.questions.asking.type).toBe('noul');
+    expect(spy.last!.questions.fits.type).toBe('noul');
+    expect((spy.last!.state as any).canDoNow).toContain('Open the menu');
+    expect((spy.last!.state as any).canDoNow).not.toContain('Press A');
   });
   it('tells Jev what was said and where the player is, and nothing about strategy', async () => {
     const spy = new Spy();
@@ -129,14 +138,36 @@ describe('what the model is shown', () => {
     party: [{ slot: 0, speciesId: 1, species: 'SQUIRTLE', nickname: 'SQUIRT', level: 12, hp: 28, maxHp: 35, status: 'OK', types: ['WATER'], moves: [{ id: 1, name: 'BUBBLE', type: 'WATER', power: 20, accuracy: 100, pp: 22, maxPp: 30 }] }],
     bag: [{ name: 'POTION', qty: 2 }], battle: { kind: 'wild', slot: 0, enemy: { species: 'RATTATA', level: 4, hp: 9, maxHp: 15, status: 'OK' } } };
 
-  it('gets the game’s stats: position, party with HP and moves, bag, money, badges, battle', async () => {
+  it('on the map: where the player is and what is next to them, not the bag, money or moves', async () => {
     const spy = new Spy();
-    await new Interpreter(new Jev({ backend: spy, logFile: null }), new StandinJev()).interpret('open the menu', acts, full);
-    expect(spy.last!.state).toMatchObject({
-      said: 'open the menu', place: 'VIRIDIAN_CITY', player: { x: 3, y: 6, facing: 'up' }, money: 3000, badges: 1, onScreenText: 'Hello!',
-      party: [{ name: 'SQUIRT', species: 'SQUIRTLE', level: 12, hp: '28/35', moves: ['BUBBLE 22/30'] }],
-      bag: ['POTION x2'], battle: { kind: 'wild', enemy: 'RATTATA Lv4', enemyHp: '9/15' },
+    await new Interpreter(new Jev({ backend: spy, logFile: null }), new StandinJev()).interpret('open the menu', acts, { ...full, battle: null, mode: 'overworld', around: { north: 'open ground' } } as any);
+    const st = spy.last!.state as any;
+    expect(st).toMatchObject({ said: 'open the menu', place: 'VIRIDIAN_CITY', player: { x: 3, y: 6, facing: 'up' }, nextToPlayer: { north: 'open ground' }, onScreenText: 'Hello!', party: [{ name: 'SQUIRT', species: 'SQUIRTLE' }] });
+    for (const k of ['bag', 'money', 'badges', 'battle']) expect(st[k]).toBeUndefined();
+    expect(st.party[0].moves).toBeUndefined();
+  });
+
+  it('in a battle: the battle, the party with HP and moves, and the bag; not the map position', async () => {
+    const spy = new Spy();
+    await new Interpreter(new Jev({ backend: spy, logFile: null }), new StandinJev()).interpret('use bubble', acts, { ...full, mode: 'battle' });
+    const st = spy.last!.state as any;
+    expect(st).toMatchObject({
+      situation: 'battle', party: [{ name: 'SQUIRT', species: 'SQUIRTLE', level: 12, hp: '28/35', moves: ['BUBBLE 22/30'] }],
+      bag: ['POTION x2'], battle: { kind: 'wild', enemy: 'RATTATA level 4', enemyHp: '9/15' },
     });
+    for (const k of ['money', 'badges', 'player', 'nextToPlayer']) expect(st[k]).toBeUndefined();
+  });
+
+  it('names the player and the rival, so "my rival\'s house" and the rival\'s name can be matched', async () => {
+    const spy = new Spy();
+    await new Interpreter(new Jev({ backend: spy, logFile: null }), new StandinJev()).interpret('talk to blue', acts, { ...S, playerName: 'RED', rivalName: 'BLUE' });
+    expect((spy.last!.state as any).names).toEqual({ player: 'RED', rival: 'BLUE' });
+  });
+
+  it('leaves out empty on-screen text', async () => {
+    const spy = new Spy();
+    await new Interpreter(new Jev({ backend: spy, logFile: null }), new StandinJev()).interpret('open the menu', acts, S);
+    expect((spy.last!.state as any).onScreenText).toBeUndefined();
   });
 
   it('gets the picture of the game screen when one is supplied', async () => {
@@ -181,38 +212,92 @@ describe('"fight" opens the move list; it does not pick a move', () => {
   });
 });
 
-describe('Interpreter: carrying on with a command that needs more than one action', () => {
-  /** A stand-in for the real model that always answers with the given probabilities. */
-  const fixed = (probs: Record<string, number>, seen?: (req: JevRequest) => void): JevBackend => ({
-    name: 'gateway',
-    evaluate: async (req: JevRequest): Promise<JevResult> => {
-      seen?.(req);
-      const choice = Object.entries(probs).sort((a, b) => b[1] - a[1])[0][0];
-      return { answers: { intent: { type: 'choice', choice, probabilities: probs } }, usage: {} };
-    },
-  });
-  const withModel = (b: JevBackend) => new Interpreter(new Jev({ backend: b, logFile: null }), new StandinJev());
+/** A stand-in for the real model that answers the pick with `probs` and each yes/no question as given. */
+const model = (probs: Record<string, number>, nouls: { asking?: number; fits?: number; done?: number } = {}, seen?: (req: JevRequest) => void): JevBackend => ({
+  name: 'gateway',
+  evaluate: async (req: JevRequest): Promise<JevResult> => {
+    seen?.(req);
+    const choice = Object.entries(probs).sort((a, b) => b[1] - a[1])[0][0];
+    const answers: JevResult['answers'] = { intent: { type: 'choice', choice, probabilities: probs } };
+    for (const [k, v] of Object.entries({ asking: 0.02, fits: 0.95, done: 0.05, ...nouls })) if (req.questions[k]) answers[k] = { type: 'noul', noul: v };
+    return { answers, usage: {} };
+  },
+});
+const withModel = (b: JevBackend) => new Interpreter(new Jev({ backend: b, logFile: null }), new StandinJev());
 
-  it('offers "everything is done" and tells the model what has been done so far', async () => {
+describe('Interpreter: how the answers decide what happens', () => {
+  it('a clear yes to "is this a question" answers it, whatever the pick', async () => {
+    expect((await withModel(model({ 'npc:2': 0.99 }, { asking: 0.9 })).interpret('who is that youngster?', acts, S)).kind).toBe('question');
+  });
+  it('a clear no to "does anything fit" means it cannot be done here', async () => {
+    expect((await withModel(model({ 'npc:2': 0.96 }, { fits: 0.1 })).interpret('fly to cerulean', acts, S)).kind).toBe('impossible');
+  });
+  it('nothing fits but it might be a question: it is treated as a question', async () => {
+    expect((await withModel(model({ 'npc:2': 0.96 }, { fits: 0.1, asking: 0.5 })).interpret('cerulean?', acts, S)).kind).toBe('question');
+  });
+  it('a clear fit and a likely pick acts', async () => {
+    expect(await withModel(model({ 'npc:2': 0.8, 'npc:3': 0.2 })).interpret('talk to the youngster', acts, S)).toMatchObject({ kind: 'act', action: { id: 'npc:2' }, p: 0.8 });
+  });
+  it('a likely pick acts even when the probability is split only among real actions', async () => {
+    // before: "fight" split between TACKLE 0.51 and a "nothing fits" option 0.49, and nothing happened
+    expect(await withModel(model({ 'run': 0.7, 'start': 0.3 })).interpret('run away', acts, S)).toMatchObject({ kind: 'act', action: { id: 'run' } });
+  });
+  it('an unsettled fit asks which was meant unless the pick is very sure', async () => {
+    const r = await withModel(model({ 'npc:2': 0.8, 'npc:3': 0.2 }, { fits: 0.5 })).interpret('talk to him', acts, S);
+    expect(r.kind).toBe('clarify');
+    if (r.kind === 'clarify') expect(r.options.map((o) => o.id)).toEqual(['npc:2', 'npc:3']);
+    // "play the snes": fit 0.51, pick 0.98
+    expect(await withModel(model({ 'npc:2': 0.98, 'npc:3': 0.02 }, { fits: 0.5 })).interpret('talk to him', acts, S)).toMatchObject({ kind: 'act', action: { id: 'npc:2' } });
+  });
+  it('a close pick asks which was meant', async () => {
+    const r = await withModel(model({ 'npc:2': 0.5, 'npc:3': 0.45, run: 0.05 })).interpret('talk to the youngster', acts, S);
+    expect(r.kind).toBe('clarify');
+    if (r.kind === 'clarify') expect(r.options.map((o) => o.id)).toEqual(['npc:2', 'npc:3', 'run']);
+  });
+  it('a costly action needs a stronger pick', async () => {
+    expect((await withModel(model({ 'ball:MASTER BALL': 0.8, 'ball:ULTRA BALL': 0.2 })).interpret('throw the ball', acts, S)).kind).toBe('clarify');
+    expect((await withModel(model({ 'ball:MASTER BALL': 0.97, 'ball:ULTRA BALL': 0.03 })).interpret('throw the master ball', acts, S)).kind).toBe('act');
+  });
+  it('a missing yes/no answer is not read as a yes', async () => {
+    const bare: JevBackend = { name: 'gateway', evaluate: async () => ({ answers: { intent: { type: 'choice', choice: 'npc:2', probabilities: { 'npc:2': 0.99 } } }, usage: {} }) };
+    expect((await withModel(bare).interpret('talk to the youngster', acts, S)).kind).toBe('clarify');
+  });
+});
+
+describe('Interpreter: carrying on with a command that needs more than one action', () => {
+  it('asks whether everything is done and tells the model what has been done so far', async () => {
     let req: JevRequest | undefined;
-    const r = await withModel(fixed({ __done: 0.95, 'npc:2': 0.05 }, (q) => { req = q; })).interpret('go around the boy', acts, S, { progress: ['Go around Youngster'] });
+    const r = await withModel(model({ 'npc:2': 0.95 }, { done: 0.9 }, (q) => { req = q; })).interpret('go around the boy', acts, S, { progress: ['Go around Youngster'] });
     expect(r.kind).toBe('done');
     expect((req!.state as any).alreadyDone).toEqual(['Go around Youngster']);
-    expect(Object.keys((req!.questions.intent as any).criteria)).toContain('__done');
+    expect(req!.questions.done.type).toBe('noul');
+    expect(req!.questions.asking).toBeUndefined();
+    expect(String((req!.questions.intent as any).instructions)).toMatch(/alreadyDone/);
+    expect(Object.keys((req!.questions.intent as any).criteria).some((k) => k.startsWith('__'))).toBe(false);
   });
-  it('without progress there is no such option', async () => {
+  it('without progress there is no such question', async () => {
     let req: JevRequest | undefined;
-    await withModel(fixed({ 'npc:2': 0.9 }, (q) => { req = q; })).interpret('talk to the youngster', acts, S);
-    expect(Object.keys((req!.questions.intent as any).criteria)).not.toContain('__done');
+    await withModel(model({ 'npc:2': 0.9 }, {}, (q) => { req = q; })).interpret('talk to the youngster', acts, S);
+    expect(req!.questions.done).toBeUndefined();
     expect((req!.state as any).alreadyDone).toBeUndefined();
   });
-  it('a next step needs a strong match; anything less means stop there', async () => {
-    expect(await withModel(fixed({ 'npc:2': 0.95, __done: 0.05 })).interpret('x', acts, S, { progress: ['A'] })).toMatchObject({ kind: 'act', action: { id: 'npc:2' } });
-    expect((await withModel(fixed({ 'npc:2': 0.7, __done: 0.3 })).interpret('x', acts, S, { progress: ['A'] })).kind).toBe('done');
-    expect((await withModel(fixed({ __impossible: 0.9, __done: 0.1 })).interpret('x', acts, S, { progress: ['A'] })).kind).toBe('done');
-    expect((await withModel(fixed({ __question: 0.9, __done: 0.1 })).interpret('x', acts, S, { progress: ['A'] })).kind).toBe('done');
+  it('a next step needs a clear "not done yet", a clear fit, and a strong pick; anything less means stop there', async () => {
+    expect(await withModel(model({ 'npc:2': 0.95 }, { done: 0.1 })).interpret('x', acts, S, { progress: ['A'] })).toMatchObject({ kind: 'act', action: { id: 'npc:2' } });
+    expect((await withModel(model({ 'npc:2': 0.95 }, { done: 0.5 })).interpret('x', acts, S, { progress: ['A'] })).kind).toBe('done');
+    expect((await withModel(model({ 'npc:2': 0.7, 'npc:3': 0.3 }, { done: 0.1 })).interpret('x', acts, S, { progress: ['A'] })).kind).toBe('done');
+    expect((await withModel(model({ 'npc:2': 0.95 }, { done: 0.1, fits: 0.2 })).interpret('x', acts, S, { progress: ['A'] })).kind).toBe('done');
   });
   it('the local word-matcher never carries on by itself', async () => {
     expect((await standin().interpret('talk to the youngster to the north', acts, S, { progress: ['Open the menu'] })).kind).toBe('done');
+  });
+});
+
+describe('Interpreter: the follow-up after a game prompt', () => {
+  it('says what was already done and holds every option to the strict thresholds', async () => {
+    let req: JevRequest | undefined;
+    const r = await withModel(model({ 'npc:2': 0.8, 'npc:3': 0.2 }, {}, (q) => { req = q; })).interpret('use potion on squirt', acts, S, { strict: true, justDid: 'Use POTION' });
+    expect(r.kind).toBe('clarify');
+    expect((req!.state as any).justDid).toBe('Use POTION');
+    expect(String((req!.questions.intent as any).instructions)).toMatch(/justDid/);
   });
 });

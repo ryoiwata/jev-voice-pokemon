@@ -15,3 +15,20 @@ describe('nameWords: the words in a sentence that could be the name', () => {
     ['123', []],
   ])('%s → %j', (said, want) => { expect(nameWords(said)).toEqual(want); });
 });
+
+import { nameCandidates } from '../../src/interpret/name.js';
+describe('nameCandidates: what Jev may pick the name from', () => {
+  it('offers each word once, as said', () => {
+    expect(nameCandidates("Let's name him Shigeru")).toEqual(['Lets', 'name', 'him', 'Shigeru']);
+    expect(nameCandidates('Leo leo LEO')).toEqual(['Leo']);
+  });
+  it('also offers a name spelled out letter by letter', () => {
+    expect(nameCandidates('call him L E O')).toContain('LEO');
+  });
+  it('also offers the words left after dropping filler, joined, when there are several', () => {
+    expect(nameCandidates('my name is big joe')).toContain('bigjoe');
+  });
+  it('offers nothing for nothing', () => {
+    expect(nameCandidates('  ')).toEqual([]);
+  });
+});
